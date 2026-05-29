@@ -1,0 +1,19 @@
+{
+  "name": "cs2-demo-format",
+  "version": "0.1.0",
+  "description": "CS2 Demo Export Format Specification — ZIP schema and TypeScript types",
+  "main": "schemas/index.ts",
+  "types": "schemas/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["cs2", "demo", "esports", "schema"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "zod": "^3.0.0"
+  },
+  "peerDependencies": {
+    "zod": ">=3.0.0"
+  }
+}
