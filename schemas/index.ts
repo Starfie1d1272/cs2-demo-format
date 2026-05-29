@@ -1,11 +1,12 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v0.1.0)
+ * cs2-demo-format — Canonical Zod Schemas (v1.0.0)
  *
  * These schemas define the structure of every JSON file inside a CS2 demo export ZIP.
  * Both the producer (cs2-insight-agent) and consumers (RivalHub, etc.) should validate
  * against these schemas to ensure compatibility.
  *
- * Fields marked [TBD] will be finalized at v1.0.0.
+ * Schema version string: "cs2-demo-format/1.0" (changed from "rivalhub-demo-export/1").
+ * Producers should emit the new string; consumers accept both for a grace period.
  */
 
 import { z } from "zod";
@@ -18,8 +19,12 @@ export const vec3Schema = z.object({ x: z.number(), y: z.number(), z: z.number()
 /** Which side a player/team is on in a given round */
 export const sideSchema = z.enum(["t", "ct", "unknown"]);
 
-/** Team-level economy classification for a round */
-export const economyTypeSchema = z.enum(["eco", "force", "semi", "full", "pistol"]);
+/**
+ * Per-player economy classification for a round.
+ * "full_buy" = everyone bought rifles + full util; "force" = partial buy;
+ * "eco" = mostly saved; "pistol" = pistol round (round 1 / after half).
+ */
+export const economyTypeSchema = z.enum(["eco", "force", "full_buy", "pistol"]);
 
 // Convenience aliases for nullable/optional column types
 const nullInt  = z.number().int().nullable().optional();
@@ -33,11 +38,11 @@ const nullVec3  = vec3Schema.nullable().optional();
 
 /**
  * Top-level metadata file.
- * `schemaVersion` will be renamed from "rivalhub-demo-export/1"
- * to "cs2-demo-format/1.0" at v1.0.0.
+ * `schemaVersion` is now "cs2-demo-format/1.0".
+ * Consumers should also accept the legacy "rivalhub-demo-export/1" string.
  */
 export const manifestSchema = z.object({
-  /** Format identifier + version. Currently "rivalhub-demo-export/1". */
+  /** Format identifier + version. "cs2-demo-format/1.0" (legacy: "rivalhub-demo-export/1"). */
   schemaVersion: z.string(),
   /** Tool that produced this export. */
   exporter: z.object({ name: z.string(), version: z.string() }).optional(),
@@ -66,7 +71,7 @@ export const playerRowSchema = z.object({
   steamId64: z.string(),
   /** In-game name at the time of the demo. */
   name: z.string(),
-  /** Opaque team identifier (e.g. "A" / "B") consistent within this export. */
+  /** Opaque team identifier ("teamA" / "teamB") consistent within this export. */
   teamKey: z.string(),
 });
 export const playersSchema = z.array(playerRowSchema);
@@ -75,34 +80,34 @@ export type PlayerRow = z.infer<typeof playerRowSchema>;
 // ── rounds.json ───────────────────────────────────────────────────────────────
 
 /**
- * Team economy summary for a round.
- * [TBD] Full schema to be confirmed from cs2-insight-agent v1 first export.
- * Expected to contain at minimum: { type: EconomyType, ... }
+ * Team-level economy summary for a round.
+ * Currently null (not yet emitted by cs2-insight-agent); reserved for future use.
+ * Consumers must handle null gracefully.
  */
-export const teamEconomySchema = z.unknown(); // [TBD v1.0.0]
+export const teamEconomySchema = z.unknown().nullable();
 
-/** One entry per round. */
+/** One entry per round (roundNumber ≥ 1; warmup round 0 is excluded). */
 export const roundRowSchema = z.object({
   roundNumber:     z.number().int(),
   startTick:       nullInt,
   freezeEndTick:   nullInt,
   endTick:         nullInt,
-  /** Side A is playing as at the start of this round. */
+  /** Side teamA is playing as at the start of this round. */
   teamASide:       nullSide,
   teamBSide:       nullSide,
   /** Score before this round begins. */
   teamAScoreBefore: nullInt,
   teamBScoreBefore: nullInt,
   /**
-   * Team A's economy classification for this round. [TBD]
+   * Team-level economy summary. Currently null; reserved for future use.
    * @see teamEconomySchema
    */
   teamAEconomy:    teamEconomySchema.optional(),
   teamBEconomy:    teamEconomySchema.optional(),
-  /** teamKey of the winning team ("A", "B", or null if undecided). */
+  /** teamKey of the winning team ("teamA", "teamB", or null if undecided). */
   winnerTeamKey:   nullStr,
   winnerSide:      nullSide,
-  /** How the round ended (e.g. "ct_win_elimination", "t_win_bomb"). */
+  /** How the round ended (e.g. "ct_win", "t_win", "ct_win_bomb_defused"). */
   endReason:       nullStr,
 });
 export const roundsSchema = z.array(roundRowSchema);
@@ -116,12 +121,16 @@ export type RoundRow = z.infer<typeof roundRowSchema>;
  *
  * Notes:
  * - `kast` is a PERCENTAGE in [0, 100] (e.g. 73.5, not 0.735).
+ * - `rounds` = total map rounds (added in exporter v2.1.2+; null in older exports).
  * - `twoKillCount` etc. count rounds with **exactly** N kills.
  *   Multi-kill aggregates = two + three + four + five.
  */
 export const playerStatsRowSchema = z.object({
   steamId64:    z.string(),
   teamKey:      z.string(),
+
+  /** Total map rounds played. Added in exporter v2.1.2+; null in older exports. */
+  rounds:       nullInt,
 
   kills:        nullInt,
   deaths:       nullInt,
@@ -179,7 +188,7 @@ export type PlayerStatsRow = z.infer<typeof playerStatsRowSchema>;
 
 // ── player-economies.json ─────────────────────────────────────────────────────
 
-/** Per-player per-round economy snapshot. */
+/** Per-player per-round economy snapshot. One entry per player per round. */
 export const playerEconomyRowSchema = z.object({
   roundNumber:     z.number().int(),
   steamId64:       z.string(),
@@ -191,15 +200,18 @@ export const playerEconomyRowSchema = z.object({
   moneySpent:      nullInt,
   /** Equipment value at freeze-time end. */
   equipmentValue:  nullInt,
-  /** Economy classification: "eco" | "force" | "semi" | "full" | "pistol" */
-  type:            nullStr,
+  /**
+   * Economy classification for this player this round.
+   * "full_buy" | "force" | "eco" | "pistol"
+   */
+  type:            economyTypeSchema.nullable().optional(),
 });
 export const playerEconomiesSchema = z.array(playerEconomyRowSchema);
 export type PlayerEconomyRow = z.infer<typeof playerEconomyRowSchema>;
 
 // ── kills.json ────────────────────────────────────────────────────────────────
 
-/** One entry per kill event. */
+/** One entry per kill event (roundNumber ≥ 1; warmup kills excluded). */
 export const killRowSchema = z.object({
   roundNumber:         z.number().int(),
   tick:                z.number().int(),
@@ -315,12 +327,18 @@ export const grenadeRowSchema = z.object({
   roundNumber:        z.number().int(),
   throwTick:          nullInt,
   effectTick:         nullInt,
-  /** Grenade type: "flashbang" | "smoke_grenade" | "molotov" | "he_grenade" | "decoy" */
+  /** Grenade type: "flashbang" | "smoke" | "molotov" | "hegrenade" | "decoy" */
   grenade:            nullStr,
   throwerSteamId64:   nullStr,
   throwerTeamKey:     nullStr,
   throwerSide:        nullSide,
+  /**
+   * Position of the thrower at throw time.
+   * NOTE: Currently {0,0,0} for most grenades — exporter limitation.
+   * Use `effectPosition` (detonation/activation point) which is always correct.
+   */
   throwPosition:      nullVec3,
+  /** Detonation / activation position. Always populated. */
   effectPosition:     nullVec3,
 });
 export const grenadesSchema = z.array(grenadeRowSchema);
