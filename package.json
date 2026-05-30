@@ -1,6 +1,6 @@
 {
   "name": "cs2-demo-format",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "CS2 Demo Export Format Specification — ZIP schema and TypeScript types",
   "main": "schemas/index.ts",
   "types": "schemas/index.ts",

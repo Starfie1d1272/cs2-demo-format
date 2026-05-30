@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-30
+
+### Added
+- `economyTypeSchema` — restored `"pistol"` enum value for the first round of each half.
+  `pistol` has priority 0 and is determined by round number (not equipment / money values);
+  applies to round 1 and the opening round of the second half and any overtime halves.
+
 ## [1.1.0] - 2026-05-30
 
 ### Changed

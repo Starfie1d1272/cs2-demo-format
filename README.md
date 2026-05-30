@@ -1,6 +1,6 @@
 # cs2-demo-format
 
-**CS2 Demo Export Format Specification — v1.1.0**
+**CS2 Demo Export Format Specification — v1.2.0**
 
 Defines the ZIP-based export format used to exchange parsed CS2 demo data between tools.
 Currently used by [cs2-insight-agent](https://github.com/Starfie1d1272/CS2-insight-agent) (producer)
@@ -69,7 +69,7 @@ A valid export is a `.zip` file containing the following files:
 - **teamKey**: an opaque string (`"A"` / `"B"` or similar) identifying a team within this map
 - **steamId64**: Steam 64-bit ID as a decimal string
 - **KAST**: percentage value in range `[0, 100]` (e.g. `73.5`, not `0.735`)
-- **economy type**: `"eco" | "semi" | "force" | "full"`
+- **economy type**: `"pistol" | "eco" | "semi" | "force" | "full"`
 
 ### multiKills / xKillCount
 `twoKillCount`, `threeKillCount`, `fourKillCount`, `fiveKillCount` each count **rounds where the player got exactly N kills**.  
@@ -89,6 +89,7 @@ Rules are evaluated in priority order; the first match wins:
 
 | Priority | Type | Condition |
 |---|---|---|
+| 0 | `pistol` | first round of each half — determined by **round number**, not equipment |
 | 1 | `full` | `equipmentValue >= 4000` |
 | 2 | `eco` | `moneySpent < 1000` AND `equipmentValue < 2000` |
 | 3 | `force` | `startMoney > 0` AND `moneySpent / startMoney > 0.75` |

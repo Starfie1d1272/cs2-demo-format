@@ -1,5 +1,5 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v1.1.0)
+ * cs2-demo-format — Canonical Zod Schemas (v1.2.0)
  *
  * These schemas define the structure of every JSON file inside a CS2 demo export ZIP.
  * Both the producer (cs2-insight-agent) and consumers (RivalHub, etc.) should validate
@@ -22,23 +22,21 @@ export const sideSchema = z.enum(["t", "ct", "unknown"]);
 /**
  * Per-player economy classification for a round.
  *
- * Evaluated after buy phase on three inputs:
- *   - `money_spent`      — spent this round
- *   - `start_money`      — money available at round start
- *   - `equipment_value`  — total gear value after purchases
- *
  * Priority order (highest wins):
- *   1. `full`  — equipment_value >= 4000  (AK + armor + util baseline)
- *   2. `eco`   — money_spent < 1000 AND equipment_value < 2000
- *   3. `force` — start_money > 0 AND money_spent / start_money > 0.75
- *   4. `semi`  — everything else (fallback)
+ *   0. `pistol` — first round of each half (round 1 and the opening round of the
+ *                 second half / overtime halves); determined by round number, NOT
+ *                 by equipment or money values
+ *   1. `full`   — equipment_value >= 4000  (AK + armor + util baseline)
+ *   2. `eco`    — money_spent < 1000 AND equipment_value < 2000
+ *   3. `force`  — start_money > 0 AND money_spent / start_money > 0.75
+ *   4. `semi`   — everything else (fallback)
  *
  * Edge cases handled correctly:
  *   - Survived full-buy player who spent nothing → `full` (equip >= 4000)
  *   - Survived rifle/SMG player who saved → `semi`
  *   - Pure save (no spend, pistol-level gear) → `eco`
  */
-export const economyTypeSchema = z.enum(["eco", "semi", "force", "full"]);
+export const economyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full"]);
 
 // Convenience aliases for nullable/optional column types
 const nullInt  = z.number().int().nullable().optional();
