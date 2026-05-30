@@ -7,86 +7,90 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "steamId64": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "teamKey": {
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
+            ]
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
+            ]
+          },
+          "startMoney": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "moneySpent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "equipmentValue": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "pistol",
+              "eco",
+              "semi",
+              "force",
+              "full"
+            ]
+          },
+          "hasArmor": {
+            "type": "boolean"
+          },
+          "hasHelmet": {
+            "type": "boolean"
+          },
+          "hasDefuseKit": {
+            "type": "boolean"
+          },
+          "primaryWeapon": {
             "type": [
               "string",
               "null"
             ]
           },
-          "side": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+          "secondaryWeapon": {
+            "type": [
+              "string",
+              "null"
             ]
           },
-          "startMoney": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "moneySpent": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "equipmentValue": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "type": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "pistol",
-                  "eco",
-                  "semi",
-                  "force",
-                  "full"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "grenadeCount": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
           "roundNumber",
-          "steamId64"
+          "steamId64",
+          "teamKey",
+          "side",
+          "startMoney",
+          "moneySpent",
+          "equipmentValue",
+          "type",
+          "hasArmor",
+          "hasHelmet",
+          "hasDefuseKit",
+          "primaryWeapon",
+          "secondaryWeapon",
+          "grenadeCount"
         ],
         "additionalProperties": false
       }

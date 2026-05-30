@@ -7,467 +7,251 @@
         "type": "object",
         "properties": {
           "steamId64": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "teamKey": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
+            ]
           },
           "rounds": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "kills": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "deaths": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "assists": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "damageHealth": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "damageArmor": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "adr": {
-            "anyOf": [
-              {
-                "type": "number",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "minimum": 0
           },
           "utilityDamage": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "averageUtilityDamagePerRound": {
-            "anyOf": [
-              {
-                "type": "number",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "minimum": 0
           },
           "headshotCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "firstKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "firstDeathCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "tradeKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "tradeDeathCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "kast": {
-            "anyOf": [
-              {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 100
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
           },
           "oneKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "twoKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "threeKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "fourKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "fiveKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsOneCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsOneWonCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsOneLostCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsTwoCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsTwoWonCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsTwoLostCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsThreeCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsThreeWonCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsThreeLostCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsFourCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsFourWonCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsFourLostCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsFiveCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsFiveWonCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "vsFiveLostCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "bombPlantCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "bombDefuseCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "wallbangKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "noScopeKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "collateralKillCount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "kast_rounds": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
+          },
+          "flashAssistCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "enemyFlashDurationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "teamFlashDurationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "combatDeathCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bombDeathCount": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
           "steamId64",
-          "teamKey"
+          "teamKey",
+          "rounds",
+          "kills",
+          "deaths",
+          "assists",
+          "damageHealth",
+          "damageArmor",
+          "adr",
+          "utilityDamage",
+          "averageUtilityDamagePerRound",
+          "headshotCount",
+          "firstKillCount",
+          "firstDeathCount",
+          "tradeKillCount",
+          "tradeDeathCount",
+          "kast",
+          "oneKillCount",
+          "twoKillCount",
+          "threeKillCount",
+          "fourKillCount",
+          "fiveKillCount",
+          "vsOneCount",
+          "vsOneWonCount",
+          "vsOneLostCount",
+          "vsTwoCount",
+          "vsTwoWonCount",
+          "vsTwoLostCount",
+          "vsThreeCount",
+          "vsThreeWonCount",
+          "vsThreeLostCount",
+          "vsFourCount",
+          "vsFourWonCount",
+          "vsFourLostCount",
+          "vsFiveCount",
+          "vsFiveWonCount",
+          "vsFiveLostCount",
+          "bombPlantCount",
+          "bombDefuseCount",
+          "wallbangKillCount",
+          "noScopeKillCount",
+          "collateralKillCount",
+          "kast_rounds",
+          "flashAssistCount",
+          "enemyFlashDurationSeconds",
+          "teamFlashDurationSeconds",
+          "combatDeathCount",
+          "bombDeathCount"
         ],
         "additionalProperties": false
       }

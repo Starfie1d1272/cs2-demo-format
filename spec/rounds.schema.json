@@ -7,152 +7,102 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "startTick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 1
           },
           "freezeEndTick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 1
           },
           "endTick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 1
           },
           "teamASide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "teamBSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "teamAScoreBefore": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "teamBScoreBefore": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "teamAEconomy": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "pistol",
-                  "eco",
-                  "semi",
-                  "force",
-                  "full"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "pistol",
+              "eco",
+              "semi",
+              "force",
+              "full"
             ]
           },
           "teamBEconomy": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "pistol",
-                  "eco",
-                  "semi",
-                  "force",
-                  "full"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "pistol",
+              "eco",
+              "semi",
+              "force",
+              "full"
             ]
           },
           "winnerTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "winnerSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "endReason": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "t_win",
+              "ct_win",
+              "target_bombed",
+              "bomb_defused",
+              "time_ran_out"
             ]
           }
         },
         "required": [
-          "roundNumber"
+          "roundNumber",
+          "startTick",
+          "freezeEndTick",
+          "endTick",
+          "teamASide",
+          "teamBSide",
+          "teamAScoreBefore",
+          "teamBScoreBefore",
+          "teamAEconomy",
+          "teamBEconomy",
+          "winnerTeamKey",
+          "winnerSide",
+          "endReason"
         ],
         "additionalProperties": false
       }

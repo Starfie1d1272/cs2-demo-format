@@ -7,80 +7,58 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 1
           },
           "clutcherSteamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "clutcherTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "clutcherSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "opponentCount": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
           },
           "won": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "survived": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "killCount": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
           }
         },
         "required": [
-          "roundNumber"
+          "roundNumber",
+          "tick",
+          "clutcherSteamId64",
+          "clutcherTeamKey",
+          "clutcherSide",
+          "opponentCount",
+          "won",
+          "survived",
+          "killCount"
         ],
         "additionalProperties": false
       }

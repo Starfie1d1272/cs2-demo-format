@@ -7,40 +7,33 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "steamId64": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "teamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "side": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "alive": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "position": {
             "anyOf": [
@@ -48,22 +41,13 @@
                 "type": "object",
                 "properties": {
                   "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": "number"
                   },
                   "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": "number"
                   },
                   "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -79,46 +63,43 @@
             ]
           },
           "yaw": {
-            "type": [
-              "number",
-              "null"
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "pitch": {
-            "type": [
-              "number",
-              "null"
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "health": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
           },
           "armor": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
           },
           "money": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16000
           },
           "activeWeapon": {
             "type": [
@@ -127,28 +108,34 @@
             ]
           },
           "flashDurationRemaining": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number",
+            "minimum": 0,
+            "maximum": 6
           },
           "hasBomb": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "hasDefuseKit": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           }
         },
         "required": [
           "roundNumber",
           "tick",
-          "steamId64"
+          "steamId64",
+          "teamKey",
+          "side",
+          "alive",
+          "position",
+          "yaw",
+          "pitch",
+          "health",
+          "armor",
+          "money",
+          "activeWeapon",
+          "flashDurationRemaining",
+          "hasBomb",
+          "hasDefuseKit"
         ],
         "additionalProperties": false
       }

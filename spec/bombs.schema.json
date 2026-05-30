@@ -7,33 +7,68 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "type": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "plant_begin",
+              "planted",
+              "defuse_begin",
+              "defused",
+              "exploded",
+              "dropped",
+              "picked_up"
             ]
           },
           "site": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "a",
+                  "b"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "siteId": {
             "type": [
               "string",
               "null"
             ]
           },
           "actorSteamId64": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{17}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "actorTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "teamA",
+                  "teamB"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "actorSide": {
@@ -42,8 +77,7 @@
                 "type": "string",
                 "enum": [
                   "t",
-                  "ct",
-                  "unknown"
+                  "ct"
                 ]
               },
               {
@@ -52,45 +86,36 @@
             ]
           },
           "position": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "roundNumber",
-          "tick"
+          "tick",
+          "type",
+          "site",
+          "siteId",
+          "actorSteamId64",
+          "actorTeamKey",
+          "actorSide",
+          "position"
         ],
         "additionalProperties": false
       }

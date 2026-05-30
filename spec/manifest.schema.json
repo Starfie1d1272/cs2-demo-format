@@ -5,16 +5,19 @@
       "type": "object",
       "properties": {
         "schemaVersion": {
-          "type": "string"
+          "type": "string",
+          "const": "cs2-demo-format/2.0"
         },
         "exporter": {
           "type": "object",
           "properties": {
             "name": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "version": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
@@ -27,10 +30,12 @@
           "type": "object",
           "properties": {
             "name": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             },
             "version": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [
@@ -43,37 +48,121 @@
           "type": "object",
           "properties": {
             "hash": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-fA-F0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "sourceFileName": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
-            "hash"
+            "hash",
+            "sourceFileName"
           ],
           "additionalProperties": false
         },
         "mapName": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "tickrate": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         "exportedAt": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "files": {
           "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
+          "properties": {
+            "match": {
+              "type": "string",
+              "minLength": 1
+            },
+            "players": {
+              "type": "string",
+              "minLength": 1
+            },
+            "rounds": {
+              "type": "string",
+              "minLength": 1
+            },
+            "playerStats": {
+              "type": "string",
+              "minLength": 1
+            },
+            "playerEconomies": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kills": {
+              "type": "string",
+              "minLength": 1
+            },
+            "damages": {
+              "type": "string",
+              "minLength": 1
+            },
+            "blinds": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bombs": {
+              "type": "string",
+              "minLength": 1
+            },
+            "grenades": {
+              "type": "string",
+              "minLength": 1
+            },
+            "clutches": {
+              "type": "string",
+              "minLength": 1
+            },
+            "shots": {
+              "type": "string",
+              "minLength": 1
+            },
+            "positions1s": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "match",
+            "players",
+            "rounds",
+            "playerStats",
+            "playerEconomies",
+            "kills",
+            "damages",
+            "blinds",
+            "bombs",
+            "grenades",
+            "clutches"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "schemaVersion",
+        "exporter",
+        "parser",
+        "demo",
         "mapName",
         "tickrate",
+        "exportedAt",
         "files"
       ],
       "additionalProperties": false

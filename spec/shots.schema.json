@@ -7,132 +7,97 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "steamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "teamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "side": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "weapon": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "minLength": 1
           },
           "position": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           },
           "velocity": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           },
           "yaw": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
           },
           "pitch": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
           }
         },
         "required": [
           "roundNumber",
-          "tick"
+          "tick",
+          "steamId64",
+          "teamKey",
+          "side",
+          "weapon",
+          "position",
+          "velocity",
+          "yaw",
+          "pitch"
         ],
         "additionalProperties": false
       }

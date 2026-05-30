@@ -7,39 +7,69 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "killerSteamId64": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{17}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "victimSteamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "assisterSteamId64": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{17}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flashAssisterSteamId64": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{17}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "killerTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "teamA",
+                  "teamB"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "victimTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "killerSide": {
@@ -48,8 +78,7 @@
                 "type": "string",
                 "enum": [
                   "t",
-                  "ct",
-                  "unknown"
+                  "ct"
                 ]
               },
               {
@@ -58,71 +87,49 @@
             ]
           },
           "victimSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "weapon": {
+            "type": "string",
+            "minLength": 1
+          },
+          "killerActiveWeapon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "victimActiveWeapon": {
             "type": [
               "string",
               "null"
             ]
           },
           "headshot": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "flashAssist": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "tradeKill": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "tradeDeath": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "throughSmoke": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "noScope": {
-            "type": [
-              "boolean",
-              "null"
-            ]
+            "type": "boolean"
           },
           "penetratedObjects": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "killerPosition": {
             "anyOf": [
@@ -130,22 +137,13 @@
                 "type": "object",
                 "properties": {
                   "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": "number"
                   },
                   "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": "number"
                   },
                   "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -161,45 +159,49 @@
             ]
           },
           "victimPosition": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "roundNumber",
-          "tick"
+          "tick",
+          "killerSteamId64",
+          "victimSteamId64",
+          "assisterSteamId64",
+          "flashAssisterSteamId64",
+          "killerTeamKey",
+          "victimTeamKey",
+          "killerSide",
+          "victimSide",
+          "weapon",
+          "killerActiveWeapon",
+          "victimActiveWeapon",
+          "headshot",
+          "flashAssist",
+          "tradeKill",
+          "tradeDeath",
+          "throughSmoke",
+          "noScope",
+          "penetratedObjects",
+          "killerPosition",
+          "victimPosition"
         ],
         "additionalProperties": false
       }

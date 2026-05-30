@@ -1,181 +1,174 @@
 # cs2-demo-format
 
-**CS2 Demo Export Format Specification — v1.3.0**
+**Language:** English | [简体中文](./README.zh-CN.md)
 
-Defines the ZIP-based export format used to exchange parsed CS2 demo data between tools.
-Currently used by [cs2-insight-agent](https://github.com/Starfie1d1272/CS2-insight-agent) (producer)
-and [RivalHub](https://github.com/Starfie1d1272/RivalHub) (consumer).
+`cs2-demo-format` is an implementation-neutral data contract for parsed Counter-Strike 2 demo exports.
+It defines a strict ZIP package layout, machine-readable schemas, and validation rules that producers,
+consumers, and analysis tools can share without coupling to one application.
 
-> **Status**: Stable (1.x). Breaking changes require a major version bump.
+The format is intended to be useful beyond a single importer/exporter pair: a parser can produce it,
+a web app can ingest it, a rating engine can score it, and a standalone analysis tool can validate and
+query it.
 
----
+Current known implementations:
 
-## ZIP Structure
+- Producer: [`DrEAmSs59/CS2-insight-agent`](https://github.com/DrEAmSs59/CS2-insight-agent)
+- Consumer: [`Starfie1d1272/RivalHub`](https://github.com/Starfie1d1272/RivalHub)
 
-A valid export is a `.zip` file containing the following files:
+## What This Package Contains
 
-| File | Required | Description |
-|---|---|---|
-| `manifest.json` | ✅ | Metadata: schema version, map name, tickrate, file index |
-| `match.json` | ✅ | Match-level summary: team names, final scores, duration |
-| `players.json` | ✅ | Player list with Steam ID, name, team key |
-| `rounds.json` | ✅ | Per-round metadata: sides, scores, economy, outcome |
-| `player-stats.json` | ✅ | Per-player aggregated stats (K/D/A, KAST, ADR, clutches…) |
-| `player-economies.json` | ✅ | Per-player per-round economy (equipment value, type, spend) |
-| `kills.json` | ✅ | Per-kill events with weapon, positions, flags |
-| `damages.json` | ✅ | Per-damage events |
-| `blinds.json` | ✅ | Flash-blind events |
-| `bombs.json` | ✅ | Bomb plant/defuse/explode events |
-| `clutches.json` | ✅ | Clutch situations with outcome |
-| `grenades.json` | ✅ | Grenade throw/effect events |
-| `shots.json` | ⬜ | Shot events (optional, large) |
-| `positions-1s.json` | ⬜ | 1-second position snapshots (optional, very large) |
+| Path | Purpose |
+|---|---|
+| [`schemas/index.ts`](./schemas/index.ts) | Canonical Zod schemas and TypeScript types. This is the single source of truth. |
+| [`spec/*.schema.json`](./spec/) | Generated JSON Schema files for Python, Go, Rust, and other non-TypeScript tools. |
+| [`parser/index.ts`](./parser/index.ts) | Reference ZIP parser that validates package contents against the schemas. |
+| [`tools/validate.py`](./tools/validate.py) | Python validator for checking exported ZIP packages outside Node.js. |
+| [`docs/field-contract.md`](./docs/field-contract.md) | File-by-file strict field contract: semantics, calculation rules, ranges, and nullable rules. |
+| [`fixtures/`](./fixtures/) | Real-world fixture area. Current checked-in fixture is legacy v1 and is skipped by strict v2 validation. |
 
----
+`schemas/index.ts` is authoritative. When schemas change, regenerate `spec/` and commit the generated JSON Schema files.
 
-## manifest.json
+## ZIP Export Structure
 
-```jsonc
-{
-  "schemaVersion": "cs2-demo-format/1.0",   // legacy: "rivalhub-demo-export/1" (accepted during transition)
-  "exporter": { "name": "cs2-insight-agent", "version": "1.0.0" },
-  "parser":   { "name": "cs2-parser", "version": "x.y.z" },
-  "demo": { "hash": "<sha256>", "sourceFileName": "match.dem" },
-  "mapName": "de_dust2",
-  "tickrate": 64,
-  "exportedAt": "2026-05-29T10:00:00Z",
-  "files": {
-    "players":         "players.json",
-    "rounds":          "rounds.json",
-    "playerStats":     "player-stats.json",
-    "playerEconomies": "player-economies.json",
-    "kills":           "kills.json",
-    "damages":         "damages.json",
-    "blinds":          "blinds.json",
-    "bombs":           "bombs.json",
-    "clutches":        "clutches.json",
-    "grenades":        "grenades.json",
-    "shots":           "shots.json",
-    "positions1s":     "positions-1s.json"
-  }
-}
+A v2 export is a ZIP file with a `manifest.json` plus the files declared in `manifest.files`.
+All required files must be present. Optional files may be omitted from `manifest.files`.
+
+| File | Required | Shape | Purpose |
+|---|---:|---|---|
+| `manifest.json` | Yes | object | Package metadata, schema version, source demo identity, and file index. |
+| `match.json` | Yes | object | Match summary: map, tickrate, team slots, scores, duration, and source. |
+| `players.json` | Yes | array | Player identities and stable `teamKey` assignment. |
+| `rounds.json` | Yes | array | Formal round timeline, sides, score state, economy, winner, and reason. |
+| `player-stats.json` | Yes | array | Per-player full-map aggregate stats derived from formal rounds only. |
+| `player-economies.json` | Yes | array | Per-player per-round money, spend, equipment value, inventory, and buy type. |
+| `kills.json` | Yes | array | Kill events with participants, sides, weapons, positions, trade flags, and duel context. |
+| `damages.json` | Yes | array | Damage events with raw and effective health damage, armor damage, victim health, and positions. |
+| `blinds.json` | Yes | array | Flash blind events with thrower, victim, assister linkage, duration, and positions. |
+| `bombs.json` | Yes | array | Bomb planted, defused, exploded, and dropped events. |
+| `grenades.json` | Yes | array | Grenade lifecycle events and positions. |
+| `clutches.json` | Yes | array | Derived clutch situations tied back to rounds and players. |
+| `shots.json` | No | array | Shot events. Optional because this can be high volume. |
+| `positions-1s.json` | No | array | One-second player state snapshots. Optional because this can be high volume. |
+
+## Strict v2 Contract
+
+Version 2 is intentionally strict. The export should be valid when it is written; consumers should not
+need to repair malformed data.
+
+- `manifest.schemaVersion` must be `"cs2-demo-format/2.0"`.
+- `roundNumber` identifies formal rounds only. It starts at `1`, increments by `1`, and must be continuous.
+- Warmup rows and round `0` rows must not appear in event or aggregate files.
+- Tick fields are positive integers. Unknown ticks are export failures, not `0` or `null`.
+- JSON must not contain bare `NaN`, `Infinity`, or `-Infinity`.
+- `teamKey` is an internal stable slot: `"teamA"` or `"teamB"`. Real names live in `match.teamA.name` and `match.teamB.name`; they may be `null` when the demo does not provide names.
+- `side` is `"t"` or `"ct"` in formal rounds. `"unknown"` is not valid v2 data.
+- Required files and required fields are required because they are not demo-optional. Missing values indicate producer failure unless the field contract explicitly allows `null`.
+- `null` is reserved for values that the demo may genuinely not provide, such as team display names or source hash. It is not a fallback for parser errors.
+
+## Damage And ADR Semantics
+
+CS2 parsers may expose raw damage that is larger than the victim's remaining HP. Rating systems and
+platform-style ADR usually need effective damage capped by remaining HP.
+
+v2 stores both values:
+
+```text
+damages.healthDamageRaw = parser raw uncapped health damage
+damages.healthDamage    = min(healthDamageRaw, victimHealthBefore)
 ```
 
----
+Aggregate stats use effective damage:
 
-## Field Semantics
+```text
+playerStats.damageHealth = sum(damages.healthDamage for valid enemy damage)
+playerStats.adr          = playerStats.damageHealth / playerStats.rounds
+playerStats.utilityAdr   = playerStats.utilityDamage / playerStats.rounds
+```
 
-### Common types
-- **side**: `"t" | "ct" | "unknown"`
-- **teamKey**: an opaque string (`"A"` / `"B"` or similar) identifying a team within this map
-- **steamId64**: Steam 64-bit ID as a decimal string
-- **KAST**: percentage value in range `[0, 100]` (e.g. `73.5`, not `0.735`)
-- **economy type**: `"pistol" | "eco" | "semi" | "force" | "full"`
+The full inclusion and exclusion rules for self damage, team damage, world damage, bomb damage,
+KAST, first kills, assists, clutches, and utility damage are documented in
+[`docs/field-contract.md`](./docs/field-contract.md).
 
-### multiKills / xKillCount
-`twoKillCount`, `threeKillCount`, `fourKillCount`, `fiveKillCount` each count **rounds where the player got exactly N kills**.  
-Multi-kill aggregates (e.g. "2K and above") = `two + three + four + five`.
+## Producer Requirements
 
-### Economy classification algorithm (player-economies.json → `type`)
+A producer should treat this package as an export contract, not as a loose log dump.
 
-Evaluated after the buy phase using three per-player inputs:
+At minimum, a v2 producer must:
 
-| Input | Field | Description |
-|---|---|---|
-| `equipment_value` | `equipmentValue` | Total gear value after purchases |
-| `money_spent` | `moneySpent` | Amount spent this round |
-| `start_money` | `startMoney` | Money available at round start |
+- emit all required files listed in the ZIP structure;
+- emit `schemaVersion: "cs2-demo-format/2.0"`;
+- filter warmup and non-formal rows before writing;
+- produce continuous formal rounds starting at `1`;
+- ensure every event `roundNumber` exists in `rounds.json`;
+- ensure every SteamID, team key, and side can be reconciled with `players.json` and the round side mapping;
+- include one `player-economies.json` row for every player in every formal round;
+- ensure `playerStats.rounds` equals the number of formal rounds;
+- compute `adr`, `kast`, `utilityAdr`, first-kill counts, multikill counts, and clutch counts from the base event files using the documented rules;
+- fail the export instead of writing unknown sides, zero ticks, missing required participants, or non-finite numbers.
 
-Rules are evaluated in priority order; the first match wins:
+Derived analytical concepts that require product-specific interpretation, such as round swing or custom
+rating weights, should stay outside the base format. The format should preserve enough raw ingredients
+for those tools to compute their own metrics.
 
-| Priority | Type | Condition |
-|---|---|---|
-| 0 | `pistol` | first round of each half — determined by **round number**, not equipment |
-| 1 | `full` | `equipmentValue >= 4000` |
-| 2 | `eco` | `moneySpent < 1000` AND `equipmentValue < 2000` |
-| 3 | `force` | `startMoney > 0` AND `moneySpent / startMoney > 0.75` |
-| 4 | `semi` | everything else (fallback) |
+## Consumer Usage
 
-**Price reference**: `full` threshold 4000 = AK (2700) + full armor (1000) + smoke (300).
-Survived players carrying full-buy gear are correctly classified as `full` even if they spent nothing.
-
-### teamAEconomy / teamBEconomy (rounds.json)
-
-Team-level classification derived from the 5 player types via **majority vote**.  
-Ties resolve conservatively: `eco < semi < force < full` (the lower category wins).  
-Currently `null` in exporter output; field is reserved for future use. Consumers must handle `null`.
-
----
-
-## TypeScript Usage
-
-### Schemas
+TypeScript consumers can import the schemas and reference parser directly:
 
 ```ts
-import { roundsSchema, playerStatsSchema, killsSchema, SCHEMAS_BY_KEY } from 'cs2-demo-format';
+import { SCHEMAS_BY_KEY, type PlayerStatsRow } from "cs2-demo-format";
+import { parseDemoPackage } from "cs2-demo-format/parser";
+import { readFileSync } from "node:fs";
+
+const parsed = await parseDemoPackage(readFileSync("match-export.zip"));
+const stats: PlayerStatsRow[] = parsed.files.playerStats;
+
+console.log(parsed.manifest.mapName, stats.length);
 ```
 
-See [`schemas/index.ts`](./schemas/index.ts) for all Zod definitions.
+Non-TypeScript consumers should use the generated JSON Schema files in [`spec/`](./spec/).
 
-### Reference Parser
+## Validation
 
-```ts
-import { parseDemoPackage } from 'cs2-demo-format/parser';
-import { readFileSync } from 'fs';
-
-const parsed = await parseDemoPackage(readFileSync('export.zip'));
-console.log(parsed.manifest.mapName);       // "de_ancient"
-console.log(parsed.files.playerStats);      // PlayerStatsRow[]  (warmup filtered)
-console.log(parsed.files.match[0].teamA);   // { teamKey, name, score }
-```
-
----
-
-## Validation (Python / language-neutral)
-
-Pre-generated JSON Schema files in [`spec/`](./spec/) allow validation without any Node.js dependency.
-
-```python
-import json, jsonschema
-
-# Validate player-stats.json from a real export
-data   = json.load(open("player-stats.json"))
-schema = json.load(open("spec/playerStats.schema.json"))
-jsonschema.validate(data, schema)   # raises ValidationError on mismatch
-```
-
-Available schemas: `manifest`, `match`, `players`, `rounds`, `playerStats`,
-`playerEconomies`, `kills`, `damages`, `blinds`, `bombs`, `clutches`,
-`grenades`, `shots`, `positions1s`.
-
-To regenerate after schema changes:
+Run the repository checks:
 
 ```bash
+pnpm typecheck
 pnpm gen:schema
+pnpm validate:fixtures
 ```
 
----
-
-## Fixtures
-
-[`fixtures/de_ancient-2026-05-17/`](./fixtures/de_ancient-2026-05-17/) contains a real match
-export that validates cleanly against all schemas. Use it as:
-
-- **Producer regression test**: your exporter output should match this structure
-- **Consumer integration test**: run `pnpm validate:fixtures` to confirm schema ↔ data alignment
+Validate a specific ZIP export:
 
 ```bash
-pnpm validate:fixtures   # validate all fixtures against SCHEMAS_BY_KEY
+python3 tools/validate.py match-export.zip
 ```
 
----
+If local pnpm policy blocks dependency build scripts, approve the required builds once:
+
+```bash
+pnpm approve-builds
+```
+
+The validator performs both schema checks and package-level QA, including round continuity, missing
+event rounds, economy coverage, aggregate stat alignment, invalid ticks, unresolved SteamIDs, unresolved
+team/side mappings, and damage/ADR consistency.
 
 ## Versioning
 
-This package follows [Semantic Versioning](https://semver.org/):
-- **0.x.x** — pre-release, schema may change
-- **1.0.0** — stable; additive changes are minor bumps, breaking changes are major
-- The `schemaVersion` field in `manifest.json` mirrors the major version
+This package follows Semantic Versioning.
+
+- Major: new required files, required field changes, field removals, or semantic changes.
+- Minor: new optional fields, new optional files, additive schemas, or non-breaking validation improvements.
+- Patch: documentation fixes, generated-schema corrections that do not change the contract, and tooling fixes.
+
+Release tags use the `vX.Y.Z` format, for example `v2.0.0`.
+
+## Documentation Map
+
+- Full field contract: [`docs/field-contract.md`](./docs/field-contract.md)
+- JSON Schema output: [`spec/`](./spec/)
+- Fixture notes: [`fixtures/README.md`](./fixtures/README.md)
+- Release history: [`CHANGELOG.md`](./CHANGELOG.md)
 
 ## License
 

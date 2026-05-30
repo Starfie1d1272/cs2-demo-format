@@ -7,75 +7,72 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
+          },
+          "flashId": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "flasherSteamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "flashedSteamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "flasherTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "flashedTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "flasherSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "flashedSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "durationSeconds": {
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number",
+            "minimum": 0,
+            "maximum": 6
           }
         },
         "required": [
           "roundNumber",
-          "tick"
+          "tick",
+          "flashId",
+          "flasherSteamId64",
+          "flashedSteamId64",
+          "flasherTeamKey",
+          "flashedTeamKey",
+          "flasherSide",
+          "flashedSide",
+          "durationSeconds"
         ],
         "additionalProperties": false
       }

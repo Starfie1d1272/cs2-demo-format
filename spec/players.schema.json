@@ -7,13 +7,19 @@
         "type": "object",
         "properties": {
           "steamId64": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "teamKey": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
+            ]
           }
         },
         "required": [

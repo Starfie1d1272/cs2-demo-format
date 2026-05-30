@@ -5,31 +5,46 @@
       "type": "object",
       "properties": {
         "mapName": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "tickrate": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         "durationSeconds": {
-          "type": "number"
+          "type": "number",
+          "exclusiveMinimum": 0
         },
         "serverName": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "source": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "teamA": {
           "type": "object",
           "properties": {
             "teamKey": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "teamA",
+                "teamB"
+              ]
             },
             "name": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "score": {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -43,13 +58,21 @@
           "type": "object",
           "properties": {
             "teamKey": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "teamA",
+                "teamB"
+              ]
             },
             "name": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "score": {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -60,6 +83,15 @@
           "additionalProperties": false
         }
       },
+      "required": [
+        "mapName",
+        "tickrate",
+        "durationSeconds",
+        "serverName",
+        "source",
+        "teamA",
+        "teamB"
+      ],
       "additionalProperties": false
     }
   },

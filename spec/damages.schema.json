@@ -7,33 +7,47 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "tick": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
           "attackerSteamId64": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{17}$"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "victimSteamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "attackerTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "teamA",
+                  "teamB"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "victimTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "attackerSide": {
@@ -42,8 +56,7 @@
                 "type": "string",
                 "enum": [
                   "t",
-                  "ct",
-                  "unknown"
+                  "ct"
                 ]
               },
               {
@@ -52,96 +65,131 @@
             ]
           },
           "victimSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "weapon": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "minLength": 1
           },
           "hitgroup": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "generic",
+              "head",
+              "chest",
+              "stomach",
+              "left_arm",
+              "right_arm",
+              "left_leg",
+              "right_leg",
+              "gear",
+              "neck"
             ]
           },
           "healthDamage": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
+          },
+          "healthDamageRaw": {
+            "type": "integer",
+            "minimum": 0
           },
           "armorDamage": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0
           },
           "victimHealthBefore": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
           },
           "victimHealthAfter": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
           },
           "victimArmorBefore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "victimArmorAfter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "attackerPosition": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
               },
               {
                 "type": "null"
               }
             ]
           },
-          "victimArmorAfter": {
-            "anyOf": [
-              {
-                "type": "integer"
+          "victimPosition": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "roundNumber",
-          "tick"
+          "tick",
+          "attackerSteamId64",
+          "victimSteamId64",
+          "attackerTeamKey",
+          "victimTeamKey",
+          "attackerSide",
+          "victimSide",
+          "weapon",
+          "hitgroup",
+          "healthDamage",
+          "healthDamageRaw",
+          "armorDamage",
+          "victimHealthBefore",
+          "victimHealthAfter",
+          "victimArmorBefore",
+          "victimArmorAfter",
+          "attackerPosition",
+          "victimPosition"
         ],
         "additionalProperties": false
       }

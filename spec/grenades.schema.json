@@ -7,22 +7,28 @@
         "type": "object",
         "properties": {
           "roundNumber": {
-            "type": "integer"
+            "type": "integer",
+            "minimum": 1
           },
-          "throwTick": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+          "grenadeId": {
+            "type": [
+              "string",
+              "null"
             ]
           },
+          "throwTick": {
+            "type": "integer",
+            "minimum": 1
+          },
           "effectTick": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "destroyTick": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 1
               },
               {
                 "type": "null"
@@ -30,113 +36,87 @@
             ]
           },
           "grenade": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "flashbang",
+              "smoke",
+              "molotov",
+              "incendiary",
+              "hegrenade",
+              "decoy"
             ]
           },
           "throwerSteamId64": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string",
+            "pattern": "^\\d{17}$"
           },
           "throwerTeamKey": {
-            "type": [
-              "string",
-              "null"
+            "type": "string",
+            "enum": [
+              "teamA",
+              "teamB"
             ]
           },
           "throwerSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct",
-                  "unknown"
-                ]
-              },
-              {
-                "type": "null"
-              }
+            "type": "string",
+            "enum": [
+              "t",
+              "ct"
             ]
           },
           "throwPosition": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           },
           "effectPosition": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "y": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  },
-                  "z": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
               },
-              {
-                "type": "null"
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
               }
-            ]
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
-          "roundNumber"
+          "roundNumber",
+          "grenadeId",
+          "throwTick",
+          "effectTick",
+          "destroyTick",
+          "grenade",
+          "throwerSteamId64",
+          "throwerTeamKey",
+          "throwerSide",
+          "throwPosition",
+          "effectPosition"
         ],
         "additionalProperties": false
       }

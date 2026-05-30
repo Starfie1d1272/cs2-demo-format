@@ -5,6 +5,36 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-31
+
+### Changed
+- Promoted the package to a strict export contract with `schemaVersion: "cs2-demo-format/2.0"`.
+- Removed `"unknown"` from strict `side` values; formal round/player events must resolve to
+  `"t"` or `"ct"`.
+- Restricted `teamKey` to `"teamA" | "teamB"`; display names live in `match.teamA.name` and
+  `match.teamB.name` and may be `null` when the demo does not provide names.
+- Changed most schema fields from optional/nullable legacy columns into required strict fields.
+- Made the reference parser strict: it no longer sanitizes `NaN` / `Infinity` or filters warmup
+  rows after validation.
+- Reworked ADR semantics: `damages.healthDamage` is capped effective damage used for ADR,
+  while `damages.healthDamageRaw` stores the raw parser value.
+
+### Added
+- `docs/field-contract.md` — file-by-file strict ZIP field contract.
+- Bilingual README entrypoints (`README.md` and `README.zh-CN.md`) with implementation-neutral
+  positioning for producers, consumers, validators, and analysis tools.
+- Formal kill duel / flash fields: `flashAssisterSteamId64`, `killerActiveWeapon`,
+  `victimActiveWeapon`.
+- Formal economy equipment fields: `hasArmor`, `hasHelmet`, `hasDefuseKit`, `primaryWeapon`,
+  `secondaryWeapon`, `grenadeCount`.
+- Formal grenade/bomb correlation fields: `grenadeId`, `destroyTick`, `siteId`.
+- Formal stats fields: `flashAssistCount`, `enemyFlashDurationSeconds`,
+  `teamFlashDurationSeconds`, `combatDeathCount`, `bombDeathCount`.
+- Package-level QA checks in fixture and ZIP validators.
+- `pnpm-workspace.yaml` build approval for `esbuild`, so pnpm validation can run without the
+  local approve-builds prompt.
+- `fixtures/README.md` documenting the legacy v1 fixture and v2 golden-fixture requirement.
+
 ## [1.3.0] - 2026-05-30
 
 ### Added
