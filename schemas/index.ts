@@ -1,5 +1,5 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v1.0.0)
+ * cs2-demo-format — Canonical Zod Schemas (v1.1.0)
  *
  * These schemas define the structure of every JSON file inside a CS2 demo export ZIP.
  * Both the producer (cs2-insight-agent) and consumers (RivalHub, etc.) should validate
@@ -21,10 +21,24 @@ export const sideSchema = z.enum(["t", "ct", "unknown"]);
 
 /**
  * Per-player economy classification for a round.
- * "full_buy" = everyone bought rifles + full util; "force" = partial buy;
- * "eco" = mostly saved; "pistol" = pistol round (round 1 / after half).
+ *
+ * Evaluated after buy phase on three inputs:
+ *   - `money_spent`      — spent this round
+ *   - `start_money`      — money available at round start
+ *   - `equipment_value`  — total gear value after purchases
+ *
+ * Priority order (highest wins):
+ *   1. `full`  — equipment_value >= 4000  (AK + armor + util baseline)
+ *   2. `eco`   — money_spent < 1000 AND equipment_value < 2000
+ *   3. `force` — start_money > 0 AND money_spent / start_money > 0.75
+ *   4. `semi`  — everything else (fallback)
+ *
+ * Edge cases handled correctly:
+ *   - Survived full-buy player who spent nothing → `full` (equip >= 4000)
+ *   - Survived rifle/SMG player who saved → `semi`
+ *   - Pure save (no spend, pistol-level gear) → `eco`
  */
-export const economyTypeSchema = z.enum(["eco", "force", "full_buy", "pistol"]);
+export const economyTypeSchema = z.enum(["eco", "semi", "force", "full"]);
 
 // Convenience aliases for nullable/optional column types
 const nullInt  = z.number().int().nullable().optional();
@@ -80,11 +94,13 @@ export type PlayerRow = z.infer<typeof playerRowSchema>;
 // ── rounds.json ───────────────────────────────────────────────────────────────
 
 /**
- * Team-level economy summary for a round.
+ * Team-level economy classification for a round.
+ * Derived from the 5 player classifications via majority vote.
+ * Tie-break is conservative: eco < semi < force < full.
  * Currently null (not yet emitted by cs2-insight-agent); reserved for future use.
  * Consumers must handle null gracefully.
  */
-export const teamEconomySchema = z.unknown().nullable();
+export const teamEconomySchema = economyTypeSchema.nullable();
 
 /** One entry per round (roundNumber ≥ 1; warmup round 0 is excluded). */
 export const roundRowSchema = z.object({

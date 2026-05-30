@@ -1,14 +1,12 @@
 # cs2-demo-format
 
-**CS2 Demo Export Format Specification — v0.1.0 (pre-release)**
+**CS2 Demo Export Format Specification — v1.1.0**
 
 Defines the ZIP-based export format used to exchange parsed CS2 demo data between tools.
 Currently used by [cs2-insight-agent](https://github.com/Starfie1d1272/CS2-insight-agent) (producer)
 and [RivalHub](https://github.com/Starfie1d1272/RivalHub) (consumer).
 
-> **Status**: Pre-release (0.x). The schema is being validated against real demo exports.  
-> Field definitions marked `[TBD]` are pending confirmation from the first cs2-insight-agent export.  
-> Version 1.0.0 will be tagged once the schema is confirmed stable.
+> **Status**: Stable (1.x). Breaking changes require a major version bump.
 
 ---
 
@@ -71,15 +69,39 @@ A valid export is a `.zip` file containing the following files:
 - **teamKey**: an opaque string (`"A"` / `"B"` or similar) identifying a team within this map
 - **steamId64**: Steam 64-bit ID as a decimal string
 - **KAST**: percentage value in range `[0, 100]` (e.g. `73.5`, not `0.735`)
-- **economy type**: `"eco" | "force" | "semi" | "full" | "pistol"`
+- **economy type**: `"eco" | "semi" | "force" | "full"`
 
 ### multiKills / xKillCount
 `twoKillCount`, `threeKillCount`, `fourKillCount`, `fiveKillCount` each count **rounds where the player got exactly N kills**.  
 Multi-kill aggregates (e.g. "2K and above") = `two + three + four + five`.
 
+### Economy classification algorithm (player-economies.json → `type`)
+
+Evaluated after the buy phase using three per-player inputs:
+
+| Input | Field | Description |
+|---|---|---|
+| `equipment_value` | `equipmentValue` | Total gear value after purchases |
+| `money_spent` | `moneySpent` | Amount spent this round |
+| `start_money` | `startMoney` | Money available at round start |
+
+Rules are evaluated in priority order; the first match wins:
+
+| Priority | Type | Condition |
+|---|---|---|
+| 1 | `full` | `equipmentValue >= 4000` |
+| 2 | `eco` | `moneySpent < 1000` AND `equipmentValue < 2000` |
+| 3 | `force` | `startMoney > 0` AND `moneySpent / startMoney > 0.75` |
+| 4 | `semi` | everything else (fallback) |
+
+**Price reference**: `full` threshold 4000 = AK (2700) + full armor (1000) + smoke (300).
+Survived players carrying full-buy gear are correctly classified as `full` even if they spent nothing.
+
 ### teamAEconomy / teamBEconomy (rounds.json)
-**[TBD — pending cs2-insight-agent v1 first export]**  
-Expected to be an object with at minimum a `type` field. Full schema will be defined at v1.0.0.
+
+Team-level classification derived from the 5 player types via **majority vote**.  
+Ties resolve conservatively: `eco < semi < force < full` (the lower category wins).  
+Currently `null` in exporter output; field is reserved for future use. Consumers must handle `null`.
 
 ---
 

@@ -5,6 +5,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-30
+
+### Changed
+- `economyTypeSchema` enum revised to `"eco" | "semi" | "force" | "full"`.
+  Replaces the incorrect `"full_buy"` and `"pistol"` values from v1.0.0.
+  - `full`  — `equipment_value >= 4000` (AK + armor + util baseline)
+  - `eco`   — `money_spent < 1000` AND `equipment_value < 2000`
+  - `force` — `start_money > 0` AND `money_spent / start_money > 0.75`
+  - `semi`  — everything else (fallback)
+  Priority is evaluated in the order listed above; the first matching rule wins.
+- `teamEconomySchema` typed as `economyTypeSchema.nullable()` (was `z.unknown().nullable()`).
+  Team classification uses 5-player majority vote; ties resolve conservatively
+  (`eco < semi < force < full`). Field remains null in current exporter output.
+
+### Added
+- `README.md` — Economy classification algorithm documented with priority table and price
+  reference. `teamAEconomy / teamBEconomy` section updated (removes [TBD] status).
+- `tsconfig.json` — Added missing TypeScript configuration so `pnpm typecheck` works.
+
 ## [1.0.0] - 2026-05-29
 
 ### Changed
