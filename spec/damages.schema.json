@@ -1,0 +1,151 @@
+{
+  "$ref": "#/definitions/damages",
+  "definitions": {
+    "damages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "type": "integer"
+          },
+          "attackerSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "victimSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attackerTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "victimTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attackerSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weapon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hitgroup": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "healthDamage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "armorDamage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimHealthBefore": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimHealthAfter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimArmorBefore": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimArmorAfter": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roundNumber",
+          "tick"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

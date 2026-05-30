@@ -5,6 +5,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-30
+
+### Added
+- `matchSchema` — contract for `match.json` (match-level summary: team names, final scores,
+  map name, duration, server name, source). Match is a single object, not an array.
+  Added `match` key to `SCHEMAS_BY_KEY`.
+- `teamSummarySchema` — reusable sub-schema for teamA/teamB objects (`teamKey`, `name`, `score`).
+- `parser/index.ts` — reference TypeScript parser (`parseDemoPackage(buffer)`) that reads a ZIP
+  buffer, validates every file against `SCHEMAS_BY_KEY`, sanitizes NaN/Infinity → null, and
+  filters warmup rows (roundNumber=0). Now a direct dependency of the package (`jszip`).
+- `spec/*.schema.json` — 14 language-neutral JSON Schema files generated from the Zod schemas
+  via `zod-to-json-schema`. Committed to the repo so non-TypeScript consumers (Python, etc.)
+  can validate without any Node.js dependency.
+- `fixtures/de_ancient-2026-05-17/` — golden-sample fixture from a real match. All required
+  files (manifest, match, players, rounds, player-stats, player-economies, kills, damages,
+  blinds, bombs, grenades, clutches) validate cleanly against `SCHEMAS_BY_KEY`.
+- `scripts/gen-json-schema.ts` — regenerates `spec/*.schema.json` (`pnpm gen:schema`).
+- `scripts/validate-fixtures.ts` — validates all fixtures against schemas (`pnpm validate:fixtures`).
+- `FILE_SCHEMAS` re-export alias (`@deprecated`) pointing to `SCHEMAS_BY_KEY` for backward compat.
+
+### Fixed
+- `vec3Schema` — coordinate components are now `z.number().nullable()`. The exporter emits
+  `NaN` for unavailable positions (e.g. spectator kills); after sanitization these become `null`.
+- `playerStatsRowSchema` — corrected field names: `bombPlantCount` (was `bombPlantedCount`),
+  `bombDefuseCount` (was `bombDefusedCount`). Added `kast_rounds` (raw KAST round count,
+  complementary to the percentage `kast` field).
+
 ## [1.2.0] - 2026-05-30
 
 ### Added

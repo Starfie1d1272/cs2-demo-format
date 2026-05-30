@@ -1,0 +1,100 @@
+{
+  "$ref": "#/definitions/bombs",
+  "definitions": {
+    "bombs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "type": "integer"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "site": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actorSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actorTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actorSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roundNumber",
+          "tick"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

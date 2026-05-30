@@ -1,0 +1,209 @@
+{
+  "$ref": "#/definitions/kills",
+  "definitions": {
+    "kills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "type": "integer"
+          },
+          "killerSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "victimSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "assisterSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "killerTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "victimTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "killerSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weapon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headshot": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "flashAssist": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tradeKill": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tradeDeath": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "throughSmoke": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "noScope": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "penetratedObjects": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "killerPosition": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "victimPosition": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roundNumber",
+          "tick"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

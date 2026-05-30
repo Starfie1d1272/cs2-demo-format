@@ -1,0 +1,142 @@
+{
+  "$ref": "#/definitions/shots",
+  "definitions": {
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "type": "integer"
+          },
+          "steamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "teamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "side": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weapon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "velocity": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "yaw": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pitch": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "roundNumber",
+          "tick"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

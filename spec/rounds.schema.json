@@ -1,0 +1,162 @@
+{
+  "$ref": "#/definitions/rounds",
+  "definitions": {
+    "rounds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "startTick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "freezeEndTick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endTick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamASide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamBSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamAScoreBefore": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamBScoreBefore": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamAEconomy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pistol",
+                  "eco",
+                  "semi",
+                  "force",
+                  "full"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamBEconomy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pistol",
+                  "eco",
+                  "semi",
+                  "force",
+                  "full"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "winnerTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "winnerSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "roundNumber"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

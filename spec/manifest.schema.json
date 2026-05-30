@@ -1,0 +1,83 @@
+{
+  "$ref": "#/definitions/manifest",
+  "definitions": {
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string"
+        },
+        "exporter": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "parser": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "demo": {
+          "type": "object",
+          "properties": {
+            "hash": {
+              "type": "string"
+            },
+            "sourceFileName": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "hash"
+          ],
+          "additionalProperties": false
+        },
+        "mapName": {
+          "type": "string"
+        },
+        "tickrate": {
+          "type": "integer"
+        },
+        "exportedAt": {
+          "type": "string"
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "mapName",
+        "tickrate",
+        "files"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

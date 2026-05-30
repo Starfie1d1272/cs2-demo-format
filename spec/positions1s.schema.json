@@ -1,0 +1,158 @@
+{
+  "$ref": "#/definitions/positions1s",
+  "definitions": {
+    "positions1s": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "type": "integer"
+          },
+          "steamId64": {
+            "type": "string"
+          },
+          "teamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "side": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alive": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "y": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "z": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "yaw": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "pitch": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "health": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "armor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "money": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "activeWeapon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "flashDurationRemaining": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hasBomb": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "hasDefuseKit": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "roundNumber",
+          "tick",
+          "steamId64"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

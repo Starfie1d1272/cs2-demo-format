@@ -1,5 +1,5 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v1.2.0)
+ * cs2-demo-format — Canonical Zod Schemas (v1.3.0)
  *
  * These schemas define the structure of every JSON file inside a CS2 demo export ZIP.
  * Both the producer (cs2-insight-agent) and consumers (RivalHub, etc.) should validate
@@ -7,14 +7,26 @@
  *
  * Schema version string: "cs2-demo-format/1.0" (changed from "rivalhub-demo-export/1").
  * Producers should emit the new string; consumers accept both for a grace period.
+ *
+ * v1.3.0 additions:
+ *   - matchSchema (match.json — match-level summary: teams, scores, duration)
+ *   - match added to SCHEMAS_BY_KEY
  */
 
 import { z } from "zod";
 
 // ── Shared primitives ──────────────────────────────────────────────────────────
 
-/** 3D world coordinate (CS2 map coordinates) */
-export const vec3Schema = z.object({ x: z.number(), y: z.number(), z: z.number() });
+/**
+ * 3D world coordinate (CS2 map coordinates).
+ * Components are nullable: the exporter may emit NaN (serialized as null after
+ * sanitization) when position tracking is unavailable for a given event.
+ */
+export const vec3Schema = z.object({
+  x: z.number().nullable(),
+  y: z.number().nullable(),
+  z: z.number().nullable(),
+});
 
 /** Which side a player/team is on in a given round */
 export const sideSchema = z.enum(["t", "ct", "unknown"]);
@@ -39,12 +51,14 @@ export const sideSchema = z.enum(["t", "ct", "unknown"]);
 export const economyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full"]);
 
 // Convenience aliases for nullable/optional column types
-const nullInt  = z.number().int().nullable().optional();
-const nullReal  = z.number().nullable().optional();
-const nullStr   = z.string().nullable().optional();
-const nullBool  = z.boolean().nullable().optional();
-const nullSide  = sideSchema.nullable().optional();
-const nullVec3  = vec3Schema.nullable().optional();
+const nullInt      = z.number().int().nullable().optional();
+const nullNonNegInt = z.number().int().min(0).nullable().optional();
+const nullReal     = z.number().nullable().optional();
+const nullNonNeg   = z.number().min(0).nullable().optional();
+const nullStr      = z.string().nullable().optional();
+const nullBool     = z.boolean().nullable().optional();
+const nullSide     = sideSchema.nullable().optional();
+const nullVec3     = vec3Schema.nullable().optional();
 
 // ── manifest.json ─────────────────────────────────────────────────────────────
 
@@ -74,6 +88,32 @@ export const manifestSchema = z.object({
   files: z.record(z.string()),
 });
 export type Manifest = z.infer<typeof manifestSchema>;
+
+// ── match.json ────────────────────────────────────────────────────────────────
+
+/**
+ * Match-level summary (single object, not an array).
+ * Contains team names, final scores, map, and duration.
+ */
+export const teamSummarySchema = z.object({
+  teamKey: z.string(),
+  name: z.string(),
+  score: z.number().int(),
+});
+
+export const matchSchema = z.object({
+  mapName: z.string().optional(),
+  tickrate: z.number().int().optional(),
+  /** Total match duration in seconds. */
+  durationSeconds: z.number().optional(),
+  serverName: z.string().optional(),
+  /** Source of the data, e.g. "demo". */
+  source: z.string().optional(),
+  teamA: teamSummarySchema.optional(),
+  teamB: teamSummarySchema.optional(),
+});
+export type TeamSummary = z.infer<typeof teamSummarySchema>;
+export type Match = z.infer<typeof matchSchema>;
 
 // ── players.json ──────────────────────────────────────────────────────────────
 
@@ -144,58 +184,63 @@ export const playerStatsRowSchema = z.object({
   teamKey:      z.string(),
 
   /** Total map rounds played. Added in exporter v2.1.2+; null in older exports. */
-  rounds:       nullInt,
+  rounds:       nullNonNegInt,
 
-  kills:        nullInt,
-  deaths:       nullInt,
-  assists:      nullInt,
-  damageHealth: nullInt,
-  damageArmor:  nullInt,
+  kills:        nullNonNegInt,
+  deaths:       nullNonNegInt,
+  assists:      nullNonNegInt,
+  damageHealth: nullNonNegInt,
+  damageArmor:  nullNonNegInt,
   /** Average damage per round (round-weighted). */
-  adr:          nullReal,
+  adr:          nullNonNeg,
   /** Total utility damage dealt. */
-  utilityDamage: nullInt,
+  utilityDamage: nullNonNegInt,
   /** Average utility damage per round. */
-  averageUtilityDamagePerRound: nullReal,
-  headshotCount: nullInt,
+  averageUtilityDamagePerRound: nullNonNeg,
+  headshotCount: nullNonNegInt,
 
   /** Rounds where this player got the first kill of the round. */
-  firstKillCount:  nullInt,
+  firstKillCount:  nullNonNegInt,
   /** Rounds where this player died first. */
-  firstDeathCount: nullInt,
+  firstDeathCount: nullNonNegInt,
   /** Rounds where this player's kill traded an ally's death. */
-  tradeKillCount:  nullInt,
+  tradeKillCount:  nullNonNegInt,
   /** Rounds where this player's death was traded by an ally. */
-  tradeDeathCount: nullInt,
+  tradeDeathCount: nullNonNegInt,
 
   /**
    * KAST — percentage of rounds where player had a Kill, Assist, Survived, or was Traded.
    * Value in [0, 100].
    */
-  kast: nullReal,
+  kast: z.number().min(0).max(100).nullable().optional(),
 
   /** Rounds with exactly 1 kill. */
-  oneKillCount:   nullInt,
+  oneKillCount:   nullNonNegInt,
   /** Rounds with exactly 2 kills. */
-  twoKillCount:   nullInt,
+  twoKillCount:   nullNonNegInt,
   /** Rounds with exactly 3 kills. */
-  threeKillCount: nullInt,
+  threeKillCount: nullNonNegInt,
   /** Rounds with exactly 4 kills. */
-  fourKillCount:  nullInt,
+  fourKillCount:  nullNonNegInt,
   /** Rounds with exactly 5 kills. */
-  fiveKillCount:  nullInt,
+  fiveKillCount:  nullNonNegInt,
 
-  vsOneCount: nullInt, vsOneWonCount: nullInt, vsOneLostCount: nullInt,
-  vsTwoCount: nullInt, vsTwoWonCount: nullInt, vsTwoLostCount: nullInt,
-  vsThreeCount: nullInt, vsThreeWonCount: nullInt, vsThreeLostCount: nullInt,
-  vsFourCount: nullInt, vsFourWonCount: nullInt, vsFourLostCount: nullInt,
-  vsFiveCount: nullInt, vsFiveWonCount: nullInt, vsFiveLostCount: nullInt,
+  vsOneCount: nullNonNegInt, vsOneWonCount: nullNonNegInt, vsOneLostCount: nullNonNegInt,
+  vsTwoCount: nullNonNegInt, vsTwoWonCount: nullNonNegInt, vsTwoLostCount: nullNonNegInt,
+  vsThreeCount: nullNonNegInt, vsThreeWonCount: nullNonNegInt, vsThreeLostCount: nullNonNegInt,
+  vsFourCount: nullNonNegInt, vsFourWonCount: nullNonNegInt, vsFourLostCount: nullNonNegInt,
+  vsFiveCount: nullNonNegInt, vsFiveWonCount: nullNonNegInt, vsFiveLostCount: nullNonNegInt,
 
-  bombPlantedCount:  nullInt,
-  bombDefusedCount:  nullInt,
-  wallbangKillCount: nullInt,
-  noScopeKillCount:  nullInt,
-  collateralKillCount: nullInt,
+  bombPlantCount:    nullNonNegInt,
+  bombDefuseCount:   nullNonNegInt,
+  wallbangKillCount: nullNonNegInt,
+  noScopeKillCount:  nullNonNegInt,
+  collateralKillCount: nullNonNegInt,
+  /**
+   * Raw count of rounds where the player had a Kill, Assist, Survived, or was Traded.
+   * Complementary to `kast` (percentage). kast = kast_rounds / rounds * 100.
+   */
+  kast_rounds: nullNonNegInt,
 });
 export const playerStatsSchema = z.array(playerStatsRowSchema);
 export type PlayerStatsRow = z.infer<typeof playerStatsRowSchema>;
@@ -209,11 +254,11 @@ export const playerEconomyRowSchema = z.object({
   teamKey:         nullStr,
   side:            nullSide,
   /** Money at round start (before purchases). */
-  startMoney:      nullInt,
+  startMoney:      nullNonNegInt,
   /** Total money spent this round. */
-  moneySpent:      nullInt,
+  moneySpent:      nullNonNegInt,
   /** Equipment value at freeze-time end. */
-  equipmentValue:  nullInt,
+  equipmentValue:  nullNonNegInt,
   /**
    * Economy classification for this player this round.
    * "full_buy" | "force" | "eco" | "pistol"
@@ -403,6 +448,7 @@ export type PositionRow = z.infer<typeof positionRowSchema>;
 // ── All schemas by manifest file key ─────────────────────────────────────────
 
 export const SCHEMAS_BY_KEY = {
+  match:           matchSchema,
   players:         playersSchema,
   rounds:          roundsSchema,
   playerStats:     playerStatsSchema,
@@ -416,3 +462,6 @@ export const SCHEMAS_BY_KEY = {
   shots:           shotsSchema,
   positions1s:     positionsSchema,
 } as const;
+
+/** @deprecated Use SCHEMAS_BY_KEY instead. */
+export { SCHEMAS_BY_KEY as FILE_SCHEMAS };

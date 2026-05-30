@@ -1,0 +1,29 @@
+{
+  "$ref": "#/definitions/players",
+  "definitions": {
+    "players": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "steamId64": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "teamKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "steamId64",
+          "name",
+          "teamKey"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

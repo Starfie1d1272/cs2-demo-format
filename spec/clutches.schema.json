@@ -1,0 +1,90 @@
+{
+  "$ref": "#/definitions/clutches",
+  "definitions": {
+    "clutches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clutcherSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clutcherTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "clutcherSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opponentCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "won": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "survived": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "killCount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "roundNumber"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

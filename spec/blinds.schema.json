@@ -1,0 +1,85 @@
+{
+  "$ref": "#/definitions/blinds",
+  "definitions": {
+    "blinds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer"
+          },
+          "tick": {
+            "type": "integer"
+          },
+          "flasherSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "flashedSteamId64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "flasherTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "flashedTeamKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "flasherSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flashedSide": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "t",
+                  "ct",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "durationSeconds": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "roundNumber",
+          "tick"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

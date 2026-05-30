@@ -1,6 +1,6 @@
 # cs2-demo-format
 
-**CS2 Demo Export Format Specification — v1.2.0**
+**CS2 Demo Export Format Specification — v1.3.0**
 
 Defines the ZIP-based export format used to exchange parsed CS2 demo data between tools.
 Currently used by [cs2-insight-agent](https://github.com/Starfie1d1272/CS2-insight-agent) (producer)
@@ -17,6 +17,7 @@ A valid export is a `.zip` file containing the following files:
 | File | Required | Description |
 |---|---|---|
 | `manifest.json` | ✅ | Metadata: schema version, map name, tickrate, file index |
+| `match.json` | ✅ | Match-level summary: team names, final scores, duration |
 | `players.json` | ✅ | Player list with Steam ID, name, team key |
 | `rounds.json` | ✅ | Per-round metadata: sides, scores, economy, outcome |
 | `player-stats.json` | ✅ | Per-player aggregated stats (K/D/A, KAST, ADR, clutches…) |
@@ -106,12 +107,65 @@ Currently `null` in exporter output; field is reserved for future use. Consumers
 
 ---
 
-## Zod Schemas (TypeScript)
+## TypeScript Usage
 
-See [`schemas/index.ts`](./schemas/index.ts) for the canonical Zod type definitions.
+### Schemas
 
 ```ts
-import { roundsSchema, playerStatsSchema, killsSchema } from 'cs2-demo-format';
+import { roundsSchema, playerStatsSchema, killsSchema, SCHEMAS_BY_KEY } from 'cs2-demo-format';
+```
+
+See [`schemas/index.ts`](./schemas/index.ts) for all Zod definitions.
+
+### Reference Parser
+
+```ts
+import { parseDemoPackage } from 'cs2-demo-format/parser';
+import { readFileSync } from 'fs';
+
+const parsed = await parseDemoPackage(readFileSync('export.zip'));
+console.log(parsed.manifest.mapName);       // "de_ancient"
+console.log(parsed.files.playerStats);      // PlayerStatsRow[]  (warmup filtered)
+console.log(parsed.files.match[0].teamA);   // { teamKey, name, score }
+```
+
+---
+
+## Validation (Python / language-neutral)
+
+Pre-generated JSON Schema files in [`spec/`](./spec/) allow validation without any Node.js dependency.
+
+```python
+import json, jsonschema
+
+# Validate player-stats.json from a real export
+data   = json.load(open("player-stats.json"))
+schema = json.load(open("spec/playerStats.schema.json"))
+jsonschema.validate(data, schema)   # raises ValidationError on mismatch
+```
+
+Available schemas: `manifest`, `match`, `players`, `rounds`, `playerStats`,
+`playerEconomies`, `kills`, `damages`, `blinds`, `bombs`, `clutches`,
+`grenades`, `shots`, `positions1s`.
+
+To regenerate after schema changes:
+
+```bash
+pnpm gen:schema
+```
+
+---
+
+## Fixtures
+
+[`fixtures/de_ancient-2026-05-17/`](./fixtures/de_ancient-2026-05-17/) contains a real match
+export that validates cleanly against all schemas. Use it as:
+
+- **Producer regression test**: your exporter output should match this structure
+- **Consumer integration test**: run `pnpm validate:fixtures` to confirm schema ↔ data alignment
+
+```bash
+pnpm validate:fixtures   # validate all fixtures against SCHEMAS_BY_KEY
 ```
 
 ---
