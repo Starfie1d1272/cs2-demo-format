@@ -36,7 +36,7 @@ A valid export is a `.zip` file containing the following files:
 
 ```jsonc
 {
-  "schemaVersion": "rivalhub-demo-export/1",   // will become "cs2-demo-format/1.0" at v1.0.0
+  "schemaVersion": "cs2-demo-format/1.0",   // legacy: "rivalhub-demo-export/1" (accepted during transition)
   "exporter": { "name": "cs2-insight-agent", "version": "1.0.0" },
   "parser":   { "name": "cs2-parser", "version": "x.y.z" },
   "demo": { "hash": "<sha256>", "sourceFileName": "match.dem" },
