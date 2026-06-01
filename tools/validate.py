@@ -160,11 +160,15 @@ def _package_qa(data: dict, errors: list[str], warnings: list[str], note):
     bombs = _as_list(data.get("bombs"))
     grenades = _as_list(data.get("grenades"))
     clutches = _as_list(data.get("clutches"))
+    shots = _as_list(data.get("shots"))
+    positions = _as_list(data.get("positions1s"))
+    match = data.get("match") if isinstance(data.get("match"), dict) else {}
 
     player_ids = {p.get("steamId64") for p in players if isinstance(p, dict)}
     team_by_player = {p.get("steamId64"): p.get("teamKey") for p in players if isinstance(p, dict)}
     round_numbers = [r.get("roundNumber") for r in rounds if isinstance(r, dict)]
     round_set = set(round_numbers)
+    rounds_by_number = {r.get("roundNumber"): r for r in rounds if isinstance(r, dict)}
 
     note(f"rows: players={len(players)}, rounds={len(rounds)}, kills={len(kills)}, damages={len(damages)}")
 
@@ -188,12 +192,26 @@ def _package_qa(data: dict, errors: list[str], warnings: list[str], note):
         errors.append(f"rounds.json: {len(bad_tick_rounds)} row(s) violate tick order start < freezeEnd <= end; sample rounds: {sample}")
         print(f"  ✗ rounds.json: {len(bad_tick_rounds)} row(s) violate tick order start < freezeEnd <= end; sample rounds: {sample}")
 
+    _check_match_score(match, rounds, errors)
+    _check_round_winner_sides(rounds, errors)
+
     _check_event_rounds("kills", kills, round_set, errors)
     _check_event_rounds("damages", damages, round_set, errors)
     _check_event_rounds("blinds", blinds, round_set, errors)
     _check_event_rounds("bombs", bombs, round_set, errors)
     _check_event_rounds("grenades", grenades, round_set, errors)
     _check_event_rounds("clutches", clutches, round_set, errors)
+    _check_event_rounds("shots", shots, round_set, errors)
+    _check_event_rounds("positions-1s", positions, round_set, errors)
+
+    _check_tick_windows("kills", kills, rounds_by_number, errors, [("tick", False)])
+    _check_tick_windows("damages", damages, rounds_by_number, errors, [("tick", False)])
+    _check_tick_windows("blinds", blinds, rounds_by_number, errors, [("tick", False)])
+    _check_tick_windows("bombs", bombs, rounds_by_number, errors, [("tick", False)])
+    _check_tick_windows("grenades", grenades, rounds_by_number, errors, [("throwTick", False), ("effectTick", False), ("destroyTick", False)])
+    _check_tick_windows("clutches", clutches, rounds_by_number, errors, [("tick", False)])
+    _check_tick_windows("shots", shots, rounds_by_number, errors, [("tick", False)])
+    _check_tick_windows("positions-1s", positions, rounds_by_number, errors, [("tick", False)])
 
     for file_name, rows, fields in [
         ("kills", kills, ["killerSteamId64", "victimSteamId64", "assisterSteamId64", "flashAssisterSteamId64"]),
@@ -287,6 +305,7 @@ def _package_qa(data: dict, errors: list[str], warnings: list[str], note):
         if b.get("type") in {"planted", "defused"} and not b.get("actorSteamId64"):
             errors.append(f"bombs.json round {b.get('roundNumber')} tick {b.get('tick')}: {b.get('type')} requires actorSteamId64")
             print(f"  ✗ bombs.json round {b.get('roundNumber')} tick {b.get('tick')}: {b.get('type')} requires actorSteamId64")
+    _check_bomb_lifecycle(bombs, errors)
 
     for g in grenades:
         if isinstance(g, dict) and isinstance(g.get("destroyTick"), int) and g["destroyTick"] < g.get("effectTick", 0):
@@ -308,6 +327,85 @@ def _check_event_rounds(name: str, rows: list, round_set: set, errors: list[str]
         sample = ", ".join(f"{k} ({v})" for k, v in list(missing.items())[:8])
         errors.append(f"{name}.json: {total} row(s) reference roundNumber not present in rounds.json; sample: {sample}")
         print(f"  ✗ {name}.json: {total} row(s) reference roundNumber not present in rounds.json; sample: {sample}")
+
+
+def _check_match_score(match: dict, rounds: list, errors: list[str]):
+    if not isinstance(match, dict):
+        return
+    team_a = match.get("teamA") if isinstance(match.get("teamA"), dict) else {}
+    team_b = match.get("teamB") if isinstance(match.get("teamB"), dict) else {}
+    expected_a = sum(1 for r in rounds if isinstance(r, dict) and r.get("winnerTeamKey") == "teamA")
+    expected_b = sum(1 for r in rounds if isinstance(r, dict) and r.get("winnerTeamKey") == "teamB")
+    if team_a.get("score") != expected_a or team_b.get("score") != expected_b:
+        errors.append(f"match.json: score must equal round winners ({expected_a}:{expected_b})")
+        print(f"  ✗ match.json: score must equal round winners ({expected_a}:{expected_b})")
+
+
+def _check_round_winner_sides(rounds: list, errors: list[str]):
+    for r in rounds:
+        if not isinstance(r, dict):
+            continue
+        winner = r.get("winnerTeamKey")
+        expected = r.get("teamASide") if winner == "teamA" else r.get("teamBSide") if winner == "teamB" else None
+        if expected and r.get("winnerSide") != expected:
+            errors.append(f"rounds.json round {r.get('roundNumber')}: winnerSide must match winnerTeamKey side")
+            print(f"  ✗ rounds.json round {r.get('roundNumber')}: winnerSide must match winnerTeamKey side")
+
+
+def _check_tick_windows(
+    name: str,
+    rows: list,
+    rounds_by_number: dict,
+    errors: list[str],
+    fields: list[tuple[str, bool]],
+):
+    bad: list[str] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        round_row = rounds_by_number.get(row.get("roundNumber"))
+        if not isinstance(round_row, dict):
+            continue
+        for field, allow_freeze in fields:
+            tick = row.get(field)
+            if tick is None:
+                continue
+            if not isinstance(tick, int):
+                continue
+            start = round_row.get("startTick") if allow_freeze else round_row.get("freezeEndTick")
+            end = round_row.get("endTick")
+            if not isinstance(start, int) or not isinstance(end, int):
+                continue
+            if tick < start or tick > end:
+                bad.append(f"row {index} round {row.get('roundNumber')} {field}={tick}")
+                break
+    if bad:
+        sample = "; ".join(bad[:8])
+        errors.append(f"{name}.json: {len(bad)} row(s) have ticks outside their round window; sample: {sample}")
+        print(f"  ✗ {name}.json: {len(bad)} row(s) have ticks outside their round window; sample: {sample}")
+
+
+def _check_bomb_lifecycle(bombs: list, errors: list[str]):
+    by_round: dict[object, list[dict]] = {}
+    for b in bombs:
+        if isinstance(b, dict):
+            by_round.setdefault(b.get("roundNumber"), []).append(b)
+    bad: list[str] = []
+    for round_number, rows in by_round.items():
+        sorted_rows = sorted(rows, key=lambda b: b.get("tick") if isinstance(b.get("tick"), int) else -1)
+        planted_tick = None
+        for row in sorted_rows:
+            event_type = row.get("type")
+            tick = row.get("tick")
+            if event_type == "planted" and isinstance(tick, int):
+                planted_tick = tick
+            if event_type in {"exploded", "defused"} and (planted_tick is None or not isinstance(tick, int) or tick < planted_tick):
+                bad.append(f"round {round_number} {event_type}@{tick}")
+                break
+    if bad:
+        sample = "; ".join(bad[:8])
+        errors.append(f"bombs.json: {len(bad)} round(s) have terminal bomb events before planted; sample: {sample}")
+        print(f"  ✗ bombs.json: {len(bad)} round(s) have terminal bomb events before planted; sample: {sample}")
 
 
 def _check_steam_refs(name: str, rows: list, fields: list[str], player_ids: set, errors: list[str]):
