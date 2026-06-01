@@ -21,7 +21,7 @@ REQUIRED_KEYS = {
     "match", "players", "rounds", "playerStats", "playerEconomies",
     "kills", "damages", "blinds", "bombs", "grenades", "clutches",
 }
-OPTIONAL_KEYS = {"shots", "positions1s"}
+OPTIONAL_KEYS = {"shots", "positions1s", "replay"}
 KNOWN_SCHEMA_VERSIONS = {"cs2-demo-format/2.0"}
 ROUND_FILES = REQUIRED_KEYS | OPTIONAL_KEYS - {"match", "players", "playerStats"}
 EPS = 0.02
@@ -212,6 +212,13 @@ def _package_qa(data: dict, errors: list[str], warnings: list[str], note):
     _check_tick_windows("clutches", clutches, rounds_by_number, errors, [("tick", False)])
     _check_tick_windows("shots", shots, rounds_by_number, errors, [("tick", False)])
     _check_tick_windows("positions-1s", positions, rounds_by_number, errors, [("tick", False)])
+
+    # ── precision: float fields must not carry parser noise ──────────────
+    _check_precision("kills", kills, errors)
+    _check_precision("damages", damages, errors)
+    _check_precision("grenades", grenades, errors)
+    _check_precision("shots", shots, errors)
+    _check_precision("positions-1s", positions, errors)
 
     for file_name, rows, fields in [
         ("kills", kills, ["killerSteamId64", "victimSteamId64", "assisterSteamId64", "flashAssisterSteamId64"]),
@@ -441,6 +448,69 @@ def _expect_close(actual, expected: float, errors: list[str], label: str):
     if not isinstance(actual, (int, float)) or not math.isfinite(actual) or abs(actual - expected) > EPS:
         errors.append(f"{label} expected {expected:.3f}, got {actual}")
         print(f"  ✗ {label} expected {expected:.3f}, got {actual}")
+
+
+def _dp(value: float) -> int:
+    """Return the number of significant decimal places (0–15)."""
+    for dp in range(16):
+        scaled = value * (10 ** dp)
+        if abs(scaled - round(scaled)) < 1e-9:
+            return dp
+    return 15
+
+
+def _check_precision(key: str, rows: list, errors: list[str], max_samples: int = 10):
+    """Flag float fields with excessive decimal places (parser precision noise)."""
+    if not rows:
+        return
+    sample: list[str] = []
+
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        _walk_precision(row, f"{key}[{i}]", sample, max_samples)
+        if len(sample) >= max_samples:
+            break
+
+    for msg in sample:
+        errors.append(msg)
+        print(f"  ✗ {msg}")
+
+
+def _walk_precision(node, path: str, sample: list[str], max_samples: int):
+    if isinstance(node, dict):
+        # Detect vec3-like objects (exactly 3 keys: x, y, z)
+        keys = list(node.keys())
+        if sorted(keys) == ["x", "y", "z"]:
+            _check_field(node, "x", path, 2, sample, max_samples)
+            _check_field(node, "y", path, 2, sample, max_samples)
+            _check_field(node, "z", path, 1, sample, max_samples)
+            return  # don't recurse into vec3 children
+
+        for k, v in node.items():
+            if k in ("yaw", "pitch"):
+                _check_field({k: v}, k, path, 1, sample, max_samples)
+            elif k == "flashDurationRemaining":
+                _check_field({k: v}, k, path, 1, sample, max_samples)
+            elif isinstance(v, (dict, list)):
+                _walk_precision(v, f"{path}.{k}", sample, max_samples)
+
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            if isinstance(item, (dict, list)):
+                _walk_precision(item, f"{path}[{i}]", sample, max_samples)
+
+
+def _check_field(parent: dict, key: str, path: str, max_dp: int,
+                 sample: list[str], max_samples: int):
+    if len(sample) >= max_samples:
+        return
+    val = parent.get(key)
+    if not isinstance(val, (int, float)) or (isinstance(val, float) and not math.isfinite(val)):
+        return
+    if _dp(float(val)) > max_dp:
+        sample.append(f"{path}.{key}={val} ({_dp(float(val))}dp exceeds max {max_dp}dp)")
+        return
 
 
 def _finish(errors: list, warnings: list, strict: bool) -> bool:

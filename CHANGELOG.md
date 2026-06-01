@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-06-01
+
+### Added
+- Precision checks in `tools/validate.py`: float fields in vec3 objects (x/y ≤2dp, z ≤1dp),
+  yaw/pitch (≤1dp), and `flashDurationRemaining` (≤1dp) are validated for parser precision
+  noise. Violations are reported as errors.
+
+### Changed
+- `manifest.files.replay` and `replay` registered as an optional file key in the validator.
+
 ## [2.1.0] - 2026-06-01
 
 ### Added
