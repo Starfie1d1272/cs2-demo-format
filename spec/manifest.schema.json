@@ -137,6 +137,10 @@
             "positions1s": {
               "type": "string",
               "minLength": 1
+            },
+            "replay": {
+              "type": "string",
+              "minLength": 1
             }
           },
           "required": [

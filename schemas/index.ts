@@ -103,6 +103,7 @@ export const manifestSchema = z.object({
     clutches: z.string().min(1),
     shots: z.string().min(1).optional(),
     positions1s: z.string().min(1).optional(),
+    replay: z.string().min(1).optional(),
   }).strict(),
 }).strict();
 export type Manifest = z.infer<typeof manifestSchema>;
@@ -402,6 +403,55 @@ export const positionRowSchema = z.object({
 export const positionsSchema = z.array(positionRowSchema);
 export type PositionRow = z.infer<typeof positionRowSchema>;
 
+// ── replay.json (compact 2D-replay stream) ────────────────────────────────────
+//
+// A columnar, quantized player-movement stream tuned for a 2D replay viewer —
+// distinct from positions-1s (which stays at 1 Hz for analytics/heatmaps).
+//
+// Per round, each player carries parallel arrays of length `frameCount`. The
+// tick of frame `i` is `startTick + i * tickStep`, so per-frame tick/round are
+// implied, not stored. Coordinates are integers in game units divided by
+// `meta.coordScale` (1 = raw rounded). Static identity (steamId64/teamKey/side)
+// is stored once per player per round, never per frame.
+export const replayPlayerTrackSchema = z.object({
+  steamId64: steamId64Schema,
+  teamKey: teamKeySchema,
+  side: sideSchema,
+  x: z.array(z.number().int()),
+  y: z.array(z.number().int()),
+  z: z.array(z.number().int()),
+  // facing angle in whole degrees, -180..180
+  yaw: z.array(z.number().int().min(-180).max(180)),
+  hp: z.array(nonNegInt.max(100)),
+  // index into `weaponDict`; -1 = none/unknown
+  weapon: z.array(z.number().int().min(-1)),
+  // bitfield per frame: 1=alive, 2=hasBomb, 4=hasDefuseKit, 8=flashed
+  flags: z.array(nonNegInt.max(15)),
+}).strict();
+export type ReplayPlayerTrack = z.infer<typeof replayPlayerTrackSchema>;
+
+export const replayRoundSchema = z.object({
+  roundNumber: positiveInt,
+  startTick: positiveInt,
+  tickStep: positiveInt,
+  frameCount: nonNegInt,
+  players: z.array(replayPlayerTrackSchema),
+}).strict();
+export type ReplayRound = z.infer<typeof replayRoundSchema>;
+
+export const replaySchema = z.object({
+  meta: z.object({
+    // frames per second of game time captured (e.g. 8)
+    sampleRate: positiveInt,
+    tickrate: positiveInt,
+    // game units per stored coordinate unit (1 = raw value rounded to int)
+    coordScale: positiveInt,
+  }).strict(),
+  weaponDict: z.array(z.string()),
+  rounds: z.array(replayRoundSchema),
+}).strict();
+export type Replay = z.infer<typeof replaySchema>;
+
 // ── All schemas by manifest file key ─────────────────────────────────────────
 
 export const SCHEMAS_BY_KEY = {
@@ -418,6 +468,7 @@ export const SCHEMAS_BY_KEY = {
   grenades: grenadesSchema,
   shots: shotsSchema,
   positions1s: positionsSchema,
+  replay: replaySchema,
 } as const;
 
 /** @deprecated Use SCHEMAS_BY_KEY instead. */

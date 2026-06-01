@@ -5,6 +5,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-01
+
+### Added
+- Optional `replay.json` stream and `manifest.files.replay` key: a compact, columnar,
+  quantized player-movement format tuned for a 2D replay viewer. Per round, each player
+  carries parallel integer arrays (`x`/`y`/`z`/`yaw`/`hp`/`weapon`/`flags`) of length
+  `frameCount`; the tick of frame `i` is `startTick + i * tickStep`. Static identity
+  (`steamId64`/`teamKey`/`side`) is stored once per player per round. Coordinates are
+  integers in game units divided by `meta.coordScale`. `weapon` indexes a top-level
+  `weaponDict`; `flags` is a per-frame bitfield (1=alive, 2=hasBomb, 4=hasDefuseKit, 8=flashed).
+
+### Notes
+- Backward compatible within format major `cs2-demo-format/2.0`: `replay.json` is optional,
+  the `schemaVersion` literal is unchanged, and existing consumers ignore the new file.
+  `positions-1s.json` is unchanged and remains the 1 Hz analytics/heatmap stream.
+
 ## [2.0.0] - 2026-05-31
 
 ### Changed
