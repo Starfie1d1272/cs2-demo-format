@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 ## [Unreleased]
 
+### Changed
+- Split player and team economy typing: `player-economies.json.type` remains
+  `pistol/eco/semi/force/full`, while `rounds.json.teamAEconomy/teamBEconomy`
+  additionally allow `conversion` for the team that won R1/R13 in the following round.
+- Clarified economy classification: pistol rounds are R1/R13 only in MR12, OT is not
+  a pistol round; eco uses the sub-$1000 save bucket and force uses `spent/start >= 0.80`.
+
 ## [2.2.0] - 2026-06-01
 
 ### Added

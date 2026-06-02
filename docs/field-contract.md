@@ -120,8 +120,8 @@
 | `teamBSide` | side，非 null | B 队本回合阵营。 | 必须与 `teamASide` 相反。 | `"t"` 或 `"ct"`。 |
 | `teamAScoreBefore` | int，非 null | A 队回合开始前比分。 | 由此前回合胜负累计。 | `>= 0`。 |
 | `teamBScoreBefore` | int，非 null | B 队回合开始前比分。 | 由此前回合胜负累计。 | `>= 0`。 |
-| `teamAEconomy` | economy type，非 null | A 队经济类型。 | 由本回合 5 名队员经济类型多数投票得到。 | `pistol/eco/semi/force/full`。 |
-| `teamBEconomy` | economy type，非 null | B 队经济类型。 | 同上。 | `pistol/eco/semi/force/full`。 |
+| `teamAEconomy` | team economy type，非 null | A 队经济类型。 | 默认由本回合 5 名队员经济类型多数投票得到；若该队赢下 R1/R13，下一回合标记为 `conversion`。 | `pistol/eco/semi/force/full/conversion`。 |
+| `teamBEconomy` | team economy type，非 null | B 队经济类型。 | 同上。 | `pistol/eco/semi/force/full/conversion`。 |
 | `winnerTeamKey` | string，非 null | 获胜队伍。 | round outcome。 | 必须为 `teamA` 或 `teamB`。 |
 | `winnerSide` | side，非 null | 获胜阵营。 | round outcome。 | `"t"` 或 `"ct"`。 |
 | `endReason` | string，非 null | 回合结束原因。 | parser round end reason。 | `t_win/ct_win/target_bombed/bomb_defused/time_ran_out`。 |
@@ -152,11 +152,14 @@
 
 `type` 计算顺序如下，先命中者生效：
 
-1. `pistol`: 每半场和每个加时半场的第一回合，由回合位置决定。
+1. `pistol`: MR12 的 R1/R13，由回合位置决定；加时局使用加时初始经济，不标记为 pistol。
 2. `full`: `equipmentValue >= 4000`。
-3. `eco`: `moneySpent < 1000 && equipmentValue < 2000`。
-4. `force`: `startMoney > 0 && moneySpent / startMoney > 0.75`。
+3. `eco`: `moneySpent < 1000 && equipmentValue < 1000`。
+4. `force`: `startMoney > 0 && moneySpent / startMoney >= 0.80`。
 5. `semi`: 其他情况。
+
+`conversion` 仅用于 `rounds.json` 的队伍经济：R2/R14 中赢下前一个手枪局
+的队伍标记为 `conversion`，用于把手枪局后的经济转换局与普通强起/长枪局分开。
 
 ## kills.json
 

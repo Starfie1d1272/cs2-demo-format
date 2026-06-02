@@ -51,7 +51,8 @@
               "eco",
               "semi",
               "force",
-              "full"
+              "full",
+              "conversion"
             ]
           },
           "teamBEconomy": {
@@ -61,7 +62,8 @@
               "eco",
               "semi",
               "force",
-              "full"
+              "full",
+              "conversion"
             ]
           },
           "winnerTeamKey": {

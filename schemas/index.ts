@@ -16,6 +16,7 @@ export const steamId64Schema = z.string().regex(/^\d{17}$/);
 export const teamKeySchema = z.enum(["teamA", "teamB"]);
 export const sideSchema = z.enum(["t", "ct"]);
 export const economyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full"]);
+export const teamEconomyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full", "conversion"]);
 export const endReasonSchema = z.enum([
   "t_win",
   "ct_win",
@@ -140,7 +141,7 @@ export type PlayerRow = z.infer<typeof playerRowSchema>;
 
 // ── rounds.json ───────────────────────────────────────────────────────────────
 
-export const teamEconomySchema = economyTypeSchema;
+export const teamEconomySchema = teamEconomyTypeSchema;
 
 export const roundRowSchema = z.object({
   roundNumber: positiveInt,
