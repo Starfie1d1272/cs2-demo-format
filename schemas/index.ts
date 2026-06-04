@@ -400,6 +400,10 @@ export const positionRowSchema = z.object({
   flashDurationRemaining: nonNegNumber.max(6),
   hasBomb: z.boolean(),
   hasDefuseKit: z.boolean(),
+  // CS2 自带的 callout 区域名（"Middle" / "Apartments" / "BombsiteA" …）。
+  // 选手处于两个 callout 之间时无名 → null（绝不 coerce 成 ""）。
+  // 可选：v2.3.0 新增的加性字段，2.3.0 之前导出的包不带它仍合法。
+  lastPlaceName: nullableString.optional(),
 }).strict();
 export const positionsSchema = z.array(positionRowSchema);
 export type PositionRow = z.infer<typeof positionRowSchema>;
@@ -431,12 +435,31 @@ export const replayPlayerTrackSchema = z.object({
 }).strict();
 export type ReplayPlayerTrack = z.infer<typeof replayPlayerTrackSchema>;
 
+// A single thrown grenade's in-flight path, on the SAME time grid as player
+// tracks. Frame `i` is at `startTick + i * tickStep` (the round's tickStep), so
+// the path lines up with player frames for synchronized rendering. Covers the
+// flight phase only (throw → detonate); the static effect afterwards (smoke
+// cloud / fire area) lives in grenades.json via effectPosition + destroyTick.
+// Coords are integers = game units / coordScale (same convention as players).
+export const replayProjectileSchema = z.object({
+  grenade: grenadeTypeSchema,
+  throwerSteamId64: nullableSteamId64,
+  startTick: positiveInt,
+  x: z.array(z.number().int()),
+  y: z.array(z.number().int()),
+  z: z.array(z.number().int()),
+}).strict();
+export type ReplayProjectile = z.infer<typeof replayProjectileSchema>;
+
 export const replayRoundSchema = z.object({
   roundNumber: positiveInt,
   startTick: positiveInt,
   tickStep: positiveInt,
   frameCount: nonNegInt,
   players: z.array(replayPlayerTrackSchema),
+  // Optional (added in v2.3.0): grenade flight paths for this round. Packages
+  // exported before 2.3.0 omit it; renderers should treat absent as "no data".
+  projectiles: z.array(replayProjectileSchema).optional(),
 }).strict();
 export type ReplayRound = z.infer<typeof replayRoundSchema>;
 

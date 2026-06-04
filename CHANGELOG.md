@@ -1,11 +1,26 @@
 # Changelog
 
+## 2.3.0
+
+### Minor Changes
+
+- positions-1s 与 replay 补全空间/回放地基（加性、向后兼容）：
+
+  - **positions-1s 新增 `lastPlaceName`**（可选、可空）：CS2 自带 callout 区域名，
+    供 Area 占有 / 动线分析按区域聚合，免人工多边形标定。
+  - **replay 每回合新增 `projectiles`**（可选）：每颗道具的逐帧飞行弧线
+    （`grenade` / `throwerSteamId64` / `startTick` / `x[]`/`y[]`/`z[]`），与选手轨迹同
+    时间网格对齐，供 2D 回放渲染。仅飞行段；静态烟/火效果仍在 grenades.json。
+
+    2.3.0 之前导出的包不带这两个字段，仍合法校验。
+
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
 ## [Unreleased]
 
 ### Changed
+
 - Split player and team economy typing: `player-economies.json.type` remains
   `pistol/eco/semi/force/full`, while `rounds.json.teamAEconomy/teamBEconomy`
   additionally allow `conversion` for the team that won R1/R13 in the following round.
@@ -15,16 +30,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [2.2.0] - 2026-06-01
 
 ### Added
+
 - Precision checks in `tools/validate.py`: float fields in vec3 objects (x/y ≤2dp, z ≤1dp),
   yaw/pitch (≤1dp), and `flashDurationRemaining` (≤1dp) are validated for parser precision
   noise. Violations are reported as errors.
 
 ### Changed
+
 - `manifest.files.replay` and `replay` registered as an optional file key in the validator.
 
 ## [2.1.0] - 2026-06-01
 
 ### Added
+
 - Optional `replay.json` stream and `manifest.files.replay` key: a compact, columnar,
   quantized player-movement format tuned for a 2D replay viewer. Per round, each player
   carries parallel integer arrays (`x`/`y`/`z`/`yaw`/`hp`/`weapon`/`flags`) of length
@@ -34,6 +52,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
   `weaponDict`; `flags` is a per-frame bitfield (1=alive, 2=hasBomb, 4=hasDefuseKit, 8=flashed).
 
 ### Notes
+
 - Backward compatible within format major `cs2-demo-format/2.0`: `replay.json` is optional,
   the `schemaVersion` literal is unchanged, and existing consumers ignore the new file.
   `positions-1s.json` is unchanged and remains the 1 Hz analytics/heatmap stream.
@@ -41,6 +60,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [2.0.0] - 2026-05-31
 
 ### Changed
+
 - Promoted the package to a strict export contract with `schemaVersion: "cs2-demo-format/2.0"`.
 - Removed `"unknown"` from strict `side` values; formal round/player events must resolve to
   `"t"` or `"ct"`.
@@ -53,6 +73,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
   while `damages.healthDamageRaw` stores the raw parser value.
 
 ### Added
+
 - `docs/field-contract.md` — file-by-file strict ZIP field contract.
 - Bilingual README entrypoints (`README.md` and `README.zh-CN.md`) with implementation-neutral
   positioning for producers, consumers, validators, and analysis tools.
@@ -71,6 +92,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [1.3.0] - 2026-05-30
 
 ### Added
+
 - `matchSchema` — contract for `match.json` (match-level summary: team names, final scores,
   map name, duration, server name, source). Match is a single object, not an array.
   Added `match` key to `SCHEMAS_BY_KEY`.
@@ -89,6 +111,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 - `FILE_SCHEMAS` re-export alias (`@deprecated`) pointing to `SCHEMAS_BY_KEY` for backward compat.
 
 ### Fixed
+
 - `vec3Schema` — coordinate components are now `z.number().nullable()`. The exporter emits
   `NaN` for unavailable positions (e.g. spectator kills); after sanitization these become `null`.
 - `playerStatsRowSchema` — corrected field names: `bombPlantCount` (was `bombPlantedCount`),
@@ -98,6 +121,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [1.2.0] - 2026-05-30
 
 ### Added
+
 - `economyTypeSchema` — restored `"pistol"` enum value for the first round of each half.
   `pistol` has priority 0 and is determined by round number (not equipment / money values);
   applies to round 1 and the opening round of the second half and any overtime halves.
@@ -105,18 +129,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [1.1.0] - 2026-05-30
 
 ### Changed
+
 - `economyTypeSchema` enum revised to `"eco" | "semi" | "force" | "full"`.
   Replaces the incorrect `"full_buy"` and `"pistol"` values from v1.0.0.
-  - `full`  — `equipment_value >= 4000` (AK + armor + util baseline)
-  - `eco`   — `money_spent < 1000` AND `equipment_value < 2000`
+  - `full` — `equipment_value >= 4000` (AK + armor + util baseline)
+  - `eco` — `money_spent < 1000` AND `equipment_value < 2000`
   - `force` — `start_money > 0` AND `money_spent / start_money > 0.75`
-  - `semi`  — everything else (fallback)
-  Priority is evaluated in the order listed above; the first matching rule wins.
+  - `semi` — everything else (fallback)
+    Priority is evaluated in the order listed above; the first matching rule wins.
 - `teamEconomySchema` typed as `economyTypeSchema.nullable()` (was `z.unknown().nullable()`).
   Team classification uses 5-player majority vote; ties resolve conservatively
   (`eco < semi < force < full`). Field remains null in current exporter output.
 
 ### Added
+
 - `README.md` — Economy classification algorithm documented with priority table and price
   reference. `teamAEconomy / teamBEconomy` section updated (removes [TBD] status).
 - `tsconfig.json` — Added missing TypeScript configuration so `pnpm typecheck` works.
@@ -124,6 +150,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [1.0.0] - 2026-05-29
 
 ### Changed
+
 - `schemaVersion` string renamed from `"rivalhub-demo-export/1"` to `"cs2-demo-format/1.0"`.
   Consumers should accept both strings during transition.
 - `economyTypeSchema` corrected to `"eco" | "force" | "full_buy" | "pistol"` (was `"semi"/"full"`
@@ -133,6 +160,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
   status; field is confirmed null in current exporter and reserved for future use.
 
 ### Added
+
 - `playerStatsRowSchema.rounds` — total map rounds (added in cs2-insight-agent v2.1.2+;
   `null` in older exports). Enables accurate per-round rate computation without fallback.
 - `grenadeRowSchema` JSDoc note: `throwPosition` is `{0,0,0}` for most grenades (exporter
@@ -143,6 +171,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 ## [0.1.0] - 2026-05-29
 
 ### Added
+
 - Initial pre-release framework derived from RivalHub v1.26.x production schema
 - `schemas/index.ts` — Zod schemas for all 13 file types (manifest, players, rounds,
   player-stats, player-economies, kills, damages, blinds, bombs, clutches, grenades,
@@ -151,6 +180,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 - `fixtures/` — placeholder directory for sample ZIP fixtures (to be added at v1.0.0)
 
 ### Known TBD
+
 - `teamAEconomy` / `teamBEconomy` fields in `rounds.json` are typed as `z.unknown()`
   pending confirmation from cs2-insight-agent v1 first export
 - `schemaVersion` literal (`"rivalhub-demo-export/1"`) will be renamed to
