@@ -3,6 +3,25 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 3.0.1 — 2026-06-13
+
+### Fixed
+
+- **`blinds.json` 恒为空**：赛事 GOTV demo 不写入 `player_blind` 事件，回退用
+  `flashbang_detonate` + `flash_duration` tick 采样重建逐人致盲行。跨验证：
+  176 条重建数据与原生 `player_blind` 全部配对、时长误差 ≤0.016s。
+  缺 31 条（30 条是已致盲中的重叠闪，无边际影响）。（#1）
+- **`weapon_fire` velocity 永为 0**：弃用 weapon_fire event 自带的 velocity 列
+  （demoparser2 在新版中不返回该列），改从 tick 数据 `velocity` 获取。（#2, 内部）
+- **velocity NaN 污染**：NaN 字段改跳过而非填 0，符合 field-contract NaN→null 约定。
+
+### Perf
+
+- 消除 `round_for_event` 重复二分查找、`.to_dict()` 大 DF 重解析、`iterrows`
+  隐式循环，单场解析时间降约 30%。
+- 批量导出多 worker 并行 + 描述性文件名 + report.json。
+- 批量导出压缩参数优化（ZIP_STORED → 按文件类型选 fast/medium DEFLATE）。
+
 ## 3.0.0
 
 ### Breaking
