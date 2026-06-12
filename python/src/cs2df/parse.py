@@ -129,6 +129,68 @@ def _safe_ticks_df(parser: DemoParser, props: list[str], ticks: list[int]) -> "p
     return None
 
 
+def _rebuild_blinds(parser: DemoParser, detonates: list[dict]) -> list[dict]:
+    """Reconstruct per-victim blind rows from flashbang_detonate + flash_duration.
+
+    Newer demoparser2 builds no longer emit the player_blind game event; the only
+    flash signal left is flashbang_detonate (thrower + position) plus the
+    per-player flash_duration tick property. A player whose flash_duration jumps
+    across a detonate tick was blinded by that flash; the post-detonate value is
+    the (remaining ≈ full) blind duration. When several flashes pop on the same
+    tick, attribute by closest detonate position.
+    """
+    det_by_tick: dict[int, list[dict]] = {}
+    for d in detonates:
+        tick = int(d.get("tick") or 0)
+        if tick > 0:
+            det_by_tick.setdefault(tick, []).append(d)
+    if not det_by_tick:
+        return []
+    det_ticks = sorted(det_by_tick)
+    sample_ticks = sorted({t - 1 for t in det_ticks} | {t + 2 for t in det_ticks})
+    df = _safe_ticks_df(parser, ["flash_duration", "X", "Y"], sample_ticks)
+    if df is None or df.empty or "flash_duration" not in df.columns:
+        return []
+
+    state: dict[tuple[int, str], tuple[float, float | None, float | None]] = {}
+    has_xy = "X" in df.columns and "Y" in df.columns
+    for row in df.itertuples(index=False):
+        d = row._asdict()
+        sid = d.get("steamid")
+        if sid is None:
+            continue
+        fd = float(d.get("flash_duration") or 0.0)
+        x = float(d["X"]) if has_xy and d.get("X") is not None else None
+        y = float(d["Y"]) if has_xy and d.get("Y") is not None else None
+        state[(int(d["tick"]), str(int(sid)))] = (fd, x, y)
+
+    out: list[dict] = []
+    sids = {sid for (_, sid) in state}
+    for tick in det_ticks:
+        dets = det_by_tick[tick]
+        for sid in sids:
+            before = state.get((tick - 1, sid), (0.0, None, None))[0]
+            after_state = state.get((tick + 2, sid))
+            if after_state is None:
+                continue
+            after, px, py = after_state
+            if after <= before + 0.1:
+                continue
+            det = dets[0]
+            if len(dets) > 1 and px is not None and py is not None:
+                det = min(
+                    dets,
+                    key=lambda d: (float(d.get("x") or 0.0) - px) ** 2 + (float(d.get("y") or 0.0) - py) ** 2,
+                )
+            out.append({
+                "tick": tick,
+                "attacker_steamid": det.get("user_steamid"),
+                "user_steamid": sid,
+                "blind_duration": after,
+            })
+    return out
+
+
 def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
                window_before_ms: int = 2000, window_after_ms: int = 1000,
                progress: ProgressFn | None = None) -> dict[str, Any]:
@@ -170,6 +232,14 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
         other=["winner", "reason", "legacy", "blind_duration", "total_rounds_played"],
     )
     _record("parse.roundEvents", stage_started)
+
+    # demoparser2 新版已移除 player_blind 事件：用 flashbang_detonate + flash_duration
+    # tick 采样重建逐人致盲数据（旧版仍发 player_blind 时维持原路径）。
+    if not g_round["player_blind"]:
+        stage_started = time.perf_counter()
+        detonates = _safe_event(p, "flashbang_detonate")
+        g_round["player_blind"] = _rebuild_blinds(p, detonates)
+        _record("parse.blindRebuild", stage_started)
 
     _p("kills", 0.12)
     stage_started = time.perf_counter()
