@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
-    "demoparser2>=0.34",
+    "demoparser2>=0.41.2",
     "pandas>=2.0",
     "numpy>=1.26",
     "orjson>=3.9",

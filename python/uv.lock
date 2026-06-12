@@ -47,7 +47,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "demoparser2", specifier = ">=0.34" },
+    { name = "demoparser2", specifier = ">=0.41.2" },
     { name = "jsonschema", specifier = ">=4.21" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "orjson", specifier = ">=3.9" },
