@@ -13,6 +13,11 @@ dependencies = [
     "jsonschema>=4.21",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Starfie1d1272/cs2-demo-format"
+Repository = "https://github.com/Starfie1d1272/cs2-demo-format"
+Issues = "https://github.com/Starfie1d1272/cs2-demo-format/issues"
+
 [project.scripts]
 cs2df = "cs2df.cli:main"
 

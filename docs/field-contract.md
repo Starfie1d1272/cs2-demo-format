@@ -2,6 +2,7 @@
 
 本文档描述 v3 严格导出 ZIP 包中每个文件、字段、语义和计算规则。
 Machine validation 由 `spec/*.schema.json` (生成自 `schemas/index.ts`) 承担。
+README 只作为上手入口；字段级语义、派生指标和 producer 要求以本文档为准。
 
 Schema version: `cs2-demo-format/3.0`
 

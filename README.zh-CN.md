@@ -2,170 +2,207 @@
 
 **语言：** [English](./README.md) | 简体中文
 
-`cs2-demo-format` 是实现中立的 Counter-Strike 2 demo 解析结果数据合同。它定义
-严格的 ZIP 包结构、机器可读 schema 和导出质量校验规则，让导出方、导入方和分析
-工具可以围绕同一份数据格式协作，而不是绑定到某一个应用。
+`cs2-demo-format` 是一个严格、实现中立的 Counter-Strike 2 demo 解析结果 ZIP
+数据合同。
 
-这个格式的目标不是只服务一个 importer/exporter 组合——一个 parser 可以导出它，
-一个 Web 应用可以导入它，一个 rating engine 可以基于它评分，一个独立分析工具也
-可以校验和查询它。合同本身在 `schemas/index.ts` + `spec/*.schema.json`，任何
-producer 只要输出合法包即符合规范。
+它不是 demo parser、评分模型、回放播放器或 Web 应用。它是这些工具可以共享的
+数据层：一个 producer 导出合法 ZIP，多个 consumer 就能校验、查看、回放、评分或
+研究同一场比赛，而不用互相复制私有数据结构。
 
-当前已知实现：
+## 为什么需要这个格式
 
-- **导出方**：[`cs2df`](./python/)（本仓库内置参考 CLI）、
-  [`cs2-demo-analysis-kit`](https://github.com/Starfie1d1272/cs2-demo-analysis-kit)
-- **导入方**：[`RivalHub`](https://github.com/Starfie1d1272/RivalHub)
-- 原始出处：事件提取逻辑源自
-  [`DrEAmSs59/CS2-insight-agent`](https://github.com/DrEAmSs59/CS2-insight-agent)，
-  经原作者授权移植。
+原始 `.dem` 文件很难直接消费。demo parser 能暴露有用数据，但下游项目通常都会
+重复定义自己的 rounds、players、kills、damages、economy、replay 和派生统计结构。
 
-## 本仓库包含什么
+本仓库定义这层共享结构：
 
-| 路径 | 作用 |
-|---|---|
-| [`schemas/index.ts`](./schemas/index.ts) | canonical Zod schema + TypeScript 类型。单一真源。 |
-| [`spec/*.schema.json`](./spec/) | 从 Zod 生成的 JSON Schema，供 Python/Go/Rust 等非 TS 工具使用。 |
-| [`parser/index.ts`](./parser/index.ts) | 参考 TypeScript ZIP parser，按 schema 严格校验。 |
-| [`python/`](./python/) | 参考 Python 导出 CLI（`cs2df export` / `cs2df validate`）。 |
-| [`tools/validate.py`](./tools/validate.py) | 轻量 Python 校验包装（→ `cs2df validate`）。 |
-| [`docs/field-contract.md`](./docs/field-contract.md) | 按文件解释每个字段语义、计算规则和 v2→v3 迁移指南。 |
-| [`fixtures/`](./fixtures/) | Golden fixture（`fixtures/v3-mid/`——de_anubis，21 回合，research profile）。 |
+- **ZIP 包结构**：解析后的 CS2 demo 数据如何组织。
+- **Zod schema + TypeScript 类型**：供 JS/TS consumer 使用。
+- **生成的 JSON Schema**：供 Python、Go、Rust 等非 TS 工具使用。
+- **严格 parser 和 validator**：坏包应明确失败，而不是静默进入分析链路。
+- **参考 Python exporter**：`cs2df` 可把 `.dem` 导出成 v3 ZIP。
+- **真实 v3 fixture**：不导出 demo 也能直接查看格式样例。
 
-`schemas/index.ts` 是权威来源。schema 变更后需运行 `pnpm gen:schema` 并提交更新
-的 `spec/` 文件。
+合同本身位于 [`schemas/index.ts`](./schemas/index.ts) 和生成的
+[`spec/*.schema.json`](./spec/)；任何 producer 只要输出合法包即符合规范。
 
-## ZIP 包结构 (v3)
+## v3 ZIP 里有什么
 
-v3 导出包是一个 ZIP 文件，包含 `manifest.json` 及其声明的数据文件。
-
-| 文件 | 必需 | 形态 | 作用 |
-|---|---:|---|---|
-| `manifest.json` | 是 | object | 包元数据、schema 版本（`"cs2-demo-format/3.0"`）、demo 身份、文件索引。 |
-| `match.json` | 是 | object | 比赛摘要：地图、tickrate、队伍槽位、比分、时长。 |
-| `players.json` | 是 | array | 玩家身份 + `teamKey`。**行序即规范**——行号即全包通用的 `playerIndex`。 |
-| `rounds.json` | 是 | array | 正式回合时间线、阵营、比分状态、队伍经济（多数投票）、胜方、结束原因。 |
-| `player-stats.json` | 是 | array | 每名玩家聚合统计（击杀、ADR、KAST、多杀、残局、闪光等）。 |
-| `player-economies.json` | 是 | array | 每玩家每回合经济快照（金钱、花费、装备、购买类型）。行数 = rounds × players。 |
-| `kills.json` | 是 | array | 击杀事件：参与者用 `playerIndex`、武器、位置、trade/flash/smoke 标记。 |
-| `damages.json` | 是 | array | 伤害事件：原始+封顶有效生命值伤害、护甲伤害、命中部位、位置。 |
-| `blinds.json` | 是 | array | 闪光致盲事件：投掷者、被闪者、时长、flashId 关联。 |
-| `bombs.json` | 是 | array | 炸弹生命周期：`plant_begin`、`planted`、`defuse_begin`、`defused`、`exploded`、`dropped`、`picked_up`。 |
-| `grenades.json` | 是 | array | 投掷物投出/生效事件：投掷者、位置、时序、destroy tick。 |
-| `clutches.json` | 是 | array | 派生 1vN 残局：残局者、对手数、won/survived/killCount。 |
-| `shots.json` | 否 | columnar | 开枪流，按 (round, playerIndex) 分组 track，差分编码。 |
-| `replay.json` | 否 | columnar | 统一 8 Hz 玩家状态流——位置、视角、血量、护甲、金钱、装备、武器、callout 区域名、闪光、flags。合并原 `positions-1s.json`。 |
-| `duels.json` | 否 | columnar | 满 tick 交火窗口流，供反应时间分析。可选，`--research` 开关。 |
-
-## v3 核心变更
-
-- **`playerIndex` 替代 `steamId64`**：SteamID64 字符串仅在 `players.json` 出现一次。
-- **事件行移除 `teamKey` / `side`**——由 `players[playerIndex].teamKey` +
-  `rounds[roundNumber]` 推导。
-- **`positions-1s.json` 合并入 `replay.json`**——统一 8 Hz 列式流，保留原
-  positions-1s 全部字段（pitch、armor、money、equipValue、flash、place、flags）。
-- **差分编码**：所有列式流中位置/角度/经济序列使用整数差分编码，解码用运行前缀和
-  （`decodeDelta()` 辅助函数已导出）。
-- **纯整数列**：`replay.json`、`duels.json`、`shots.json` 零浮点。角度存
-  `度 × angleScale`（默认 0.1°），闪光存 0.1 秒单位，坐标存整数游戏单位。
-- **字段清理**：`kast_rounds` → `kastRounds`；移除冗余字段
-  `damages.victimHealthAfter` / `victimArmorBefore`；移除 `bombs.siteId`。
-- **`duels.json`**（research profile）——以 kill/damage 为锚的满 tick 交火窗口，
-  供反应时间测定。
-- **`shots.json`** 从行式重构为列式 track。
-- 完整 v2→v3 迁移表见 [`docs/field-contract.md`](./docs/field-contract.md)。
-
-## 基础规则（跨版本适用）
-
-以下规则不随版本变化，是格式的基线合同：
-
-- `roundNumber` 从 `1` 开始，连续递增。warmup / round 0 数据不得出现在事件或聚合文件中。
-- tick 字段必须为正整数。tick 缺失是导出方错误，不可写 `0` 或 `null`。
-- JSON 中不得出现裸 `NaN`、`Infinity` 或 `-Infinity`。
-- `null` 仅用于 demo 确实可能不提供的值（如队伍展示名、demo hash），不可作为 parser 错误的兜底值。
-- 必需文件和必需字段之所以必需，是因为它们不受 demo 是否提供影响。缺失值代表导出方失败。
-
-## 伤害与 ADR 口径
-
-CS2 parser 可能暴露超过受害者剩余 HP 的原始伤害。rating 系统和平台式 ADR 使用
-按剩余 HP 封顶的有效伤害：
+v3 包是一个 ZIP，包含 `manifest.json` 以及 manifest 声明的 JSON 文件。
 
 ```text
-damages.healthDamage    = min(healthDamageRaw, victimHealthBefore)
-playerStats.damageHealth = Σ damages.healthDamage  （仅 anti-enemy）
-playerStats.adr          = damageHealth / rounds
+match.zip
+├── manifest.json
+├── match.json
+├── players.json
+├── rounds.json
+├── player-stats.json
+├── player-economies.json
+├── kills.json
+├── damages.json
+├── blinds.json
+├── bombs.json
+├── grenades.json
+├── clutches.json
+├── shots.json      可选
+├── replay.json     可选
+└── duels.json      可选，research profile
 ```
 
-投掷物伤害（HE、火）使用相同封顶口径。
+文件分为四组：
 
-## 快速开始
+| 分组 | 文件 | 作用 |
+|---|---|---|
+| 比赛身份 | `manifest`, `match`, `players`, `rounds` | 稳定的比赛、玩家、队伍、阵营和回合时间线事实。 |
+| 事件 | `kills`, `damages`, `blinds`, `bombs`, `grenades`, `clutches` | 正式回合事件行，使用 `playerIndex` 引用玩家。 |
+| 聚合 | `player-stats`, `player-economies` | 每名玩家整场统计和逐回合经济快照。 |
+| 流数据 | `shots`, `replay`, `duels` | 开枪事件、8 Hz 回放、满 tick 交火窗口的列式整数流。 |
 
-### 导出 demo（Python）
+每个字段和计算规则见 [`docs/field-contract.md`](./docs/field-contract.md)。
+
+## v3.0.0 重点
+
+- **`playerIndex` 是标准玩家引用。** `steamId64` 只出现在 `players.json`，
+  其他文件引用玩家行号。
+- **队伍和阵营通过推导得到。** 事件行不再重复 `teamKey` 或 `side`，consumer 从
+  `players` + `rounds` 推导。
+- **`replay.json` 是统一状态流。** 旧 `positions-1s.json` 被移除；replay 包含
+  位置、视角、血量、护甲、金钱、装备价值、当前武器、区域名、闪光和 flags。
+- **列式流只存整数。** 位置、角度、金钱和装备价值均为紧凑整数数组；高频流在适合
+  的地方使用差分编码。
+- **`duels.json` 支持 research 导出。** 它保存 kill/damage 附近的满 tick 交火窗口，
+  可用于反应时间和 duel 分析。
+- **本仓库包含参考 exporter。** `cs2df` 支持导出、校验、批量处理 demo，并写出
+  每场 demo 的性能报告。
+
+## 快速开始：导出 demo
+
+参考 exporter 在 [`python/`](./python/) 中，底层使用
+[`demoparser2`](https://github.com/LaihoE/demoparser)。
 
 ```bash
-cd python && uv sync                     # 一次性初始化
-uv run cs2df export match.dem            # → match.zip（标准 8 Hz replay）
-uv run cs2df export match.dem --research # + duels.json（满 tick 交火窗口）
+cd python
+uv sync
+
+# 标准导出：必需文件 + shots.json + replay.json
+uv run cs2df export match.dem
+
+# Research 导出：额外包含满 tick duels.json
+uv run cs2df export match.dem --research
+
+# 校验结果
+uv run cs2df validate match.zip --strict
 ```
 
-### 消费导出包（TypeScript）
+批量导出一个 demo 目录：
+
+```bash
+uv run cs2df export-batch ./demos --workers 8 --descriptive
+```
+
+`export-batch` 会为每个 `.dem` 写出一个 ZIP，并额外生成 `report.json`，包含每场
+demo 的耗时、输出大小、压缩级别、吞吐和阶段 timings。默认 ZIP 压缩级别是 `3`，
+这是速度和体积之间的实测折中；如果更在意体积，可显式使用 `--compress-level 6`
+或 `--compress-level 9`。
+
+## 快速开始：消费导出包
+
+TypeScript consumer 可以使用内置严格 parser：
 
 ```ts
-import { type PlayerStatsRow } from "cs2-demo-format";
 import { parseDemoPackage, decodeDelta } from "cs2-demo-format/parser";
 import { readFileSync } from "node:fs";
 
 const pkg = await parseDemoPackage(readFileSync("match.zip"));
-console.log(pkg.manifest.mapName, pkg.files.playerStats.length);
+
+console.log(pkg.manifest.schemaVersion);
+console.log(pkg.files.match.mapName);
+console.log(pkg.files.players[pkg.files.playerStats[0].playerIndex].name);
+
+const firstReplayRound = pkg.files.replay?.rounds[0];
+const firstPlayerTrack = firstReplayRound?.players[0];
+const decodedX = firstPlayerTrack ? decodeDelta(firstPlayerTrack.x) : [];
 ```
 
-非 TypeScript consumer 使用 [`spec/`](./spec/) 中的 JSON Schema。
+非 TypeScript consumer 使用 [`spec/`](./spec/) 中的 JSON Schema；它们由同一份
+canonical Zod schema 生成。
 
-## 校验
+## 示例导出
+
+[`fixtures/v3-mid/`](./fixtures/v3-mid/) 是仓库内置的 v3 research fixture：
+
+- 地图：`de_anubis`
+- 正式回合：`21`
+- profile：`--research`
+- 文件：所有必需文件 + `shots.json`、`replay.json`、`duels.json`
+- schema version：`cs2-demo-format/3.0`
+
+它适合用作第一份可检查样例：
 
 ```bash
-# 仓库级校验
-pnpm typecheck
-pnpm gen:schema
 pnpm validate:fixtures
-
-# 校验单个导出 ZIP
-uv run cs2df validate export.zip
-python3 tools/validate.py export.zip   # 薄包装
+cat fixtures/v3-mid/manifest.json
+cat fixtures/v3-mid/match.json
 ```
 
-## 导出方要求
+最大的文件是列式流（`replay.json` 和 `duels.json`），能展示 v3 导出的真实结构和规模。
 
-符合规范的 v3 导出方必须：
+## 合同保证
 
-- 写出所有必需文件及 `schemaVersion: "cs2-demo-format/3.0"`。
-- 以稳定顺序写出 `players.json`（建议：teamKey 再 steamId64），全包以此顺序为 `playerIndex`。
-- 写入前过滤 warmup 和非正式回合。
-- 生成从 `1` 开始连续的 `roundNumber`。
-- 确保每个事件的 `roundNumber` 存在于 `rounds.json`。
-- 为每名玩家的每个正式回合写出一行 `player-economies.json`。
-- 确保 `playerStats.rounds == rounds.length`。
-- 按 [`docs/field-contract.md`](./docs/field-contract.md) 中的规则，从事件文件计算 ADR、KAST、首杀/多杀/残局次数。
-- 列式流中位置/角度/经济序列使用差分编码。
-- 遇到未知阵营、零 tick、缺失必需主体或非有限数字时让导出失败，而不是写出坏数据。
+合法 v3 包保证：
+
+- `schemaVersion` 必须是 `"cs2-demo-format/3.0"`。
+- `players.json` 行序是规范；行号即 `playerIndex`。
+- `roundNumber` 从 `1` 开始，只覆盖正式回合。
+- 事件里的 `roundNumber` 必须存在于 `rounds.json`。
+- 必需文件和必需字段必须存在。
+- JSON 不包含裸 `NaN`、`Infinity` 或 `-Infinity`。
+- 同一 columnar track 内数组长度一致。
+- delta 数组用前缀和解码。
+- package-level QA 会检查常见跨文件不一致。
+
+伤害/ADR、经济分类、KAST、残局、replay 和 duel-window 语义以
+[`docs/field-contract.md`](./docs/field-contract.md) 为准。
+
+## 仓库结构
+
+| 路径 | 作用 |
+|---|---|
+| [`schemas/index.ts`](./schemas/index.ts) | canonical Zod schema、TypeScript 类型和解码 helper。 |
+| [`spec/`](./spec/) | 供非 TypeScript consumer 使用的生成 JSON Schema。 |
+| [`parser/index.ts`](./parser/index.ts) | 参考 TypeScript ZIP parser 和 schema validator。 |
+| [`python/`](./python/) | 参考 Python exporter / validator CLI（`cs2df`）。 |
+| [`tools/validate.py`](./tools/validate.py) | `cs2df validate` 的薄包装。 |
+| [`docs/field-contract.md`](./docs/field-contract.md) | 按文件说明字段语义和计算规则。 |
+| [`fixtures/`](./fixtures/) | v3 golden fixture 和历史 legacy fixture。 |
+| [`CHANGELOG.md`](./CHANGELOG.md) | 发布历史。 |
+
+schema 变更后运行：
+
+```bash
+pnpm gen:schema
+pnpm typecheck
+pnpm validate:fixtures
+```
+
+## 已知实现
+
+- **参考 producer：** [`python/cs2df`](./python/)
+- **Producer / toolkit：** [`cs2-demo-analysis-kit`](https://github.com/Starfie1d1272/cs2-demo-analysis-kit)
+- **Consumer：** [`RivalHub`](https://github.com/Starfie1d1272/RivalHub)
+- **原始事件提取出处：**
+  [`DrEAmSs59/CS2-insight-agent`](https://github.com/DrEAmSs59/CS2-insight-agent)，
+  经原作者授权移植。
 
 ## 版本规则
 
 本包遵循 [Semantic Versioning](https://semver.org/)。
 
-- **Major** — 新增必需文件、必需字段变化、字段删除或语义变化。
-- **Minor** — 新增可选字段/文件、schema 追加。
-- **Patch** — 文档修正、工具修正。
+- **Major：** 必需文件、必需字段、字段删除或语义变化。
+- **Minor：** 新增可选文件、可选字段或生成 schema。
+- **Patch：** 不改变 ZIP 合同的文档、校验工具或 exporter 修复。
 
-发布 tag 使用 `vX.Y.Z` 格式（如 `v3.0.0`）。
-
-## 文档索引
-
-- 完整字段合同：[`docs/field-contract.md`](./docs/field-contract.md)
-- JSON Schema：[`spec/`](./spec/)
-- 参考导出器：[`python/`](./python/)
-- Fixtures：[`fixtures/`](./fixtures/)
-- 发布历史：[`CHANGELOG.md`](./CHANGELOG.md)
+发布 tag 使用 `vX.Y.Z` 格式。
 
 ## License
 

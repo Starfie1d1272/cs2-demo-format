@@ -37,9 +37,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 - **`decodeDelta()` 解码辅助函数**，由 `schemas/index.ts` 导出，`parser/index.ts`
   再导出。
 - **参考 Python 导出 CLI** (`python/src/cs2df/`)，uv 管理。向量化
-  DataFrame→numpy→delta 管线、orjson 序列化、deflate level 9。命令：
-  `cs2df export` / `cs2df validate`。hasBomb 由炸弹事件状态机推导（不再逐帧解析
-  inventory），大解析阶段性能大幅提升。
+  DataFrame→numpy→delta 管线、orjson 序列化、默认 deflate level 3。命令：
+  `cs2df export` / `cs2df export-batch` / `cs2df validate`。hasBomb 由炸弹事件
+  状态机推导（不再逐帧解析 inventory），大解析阶段性能大幅提升。
+- **批量导出性能报告**：`export-batch` 写出 `report.json`，包含每场 demo 的
+  成功/失败、输出大小、压缩级别、吞吐和 parse/package/write 阶段 timings。
+- **批量导出失败隔离**：单个损坏 demo 或 native parser 失败记录为失败行，不再让
+  整个 batch 进程 traceback 崩溃。
 - **v3 golden fixture** (`fixtures/v3-mid/`)：de_anubis, 21 回合, research profile。
 
 ### Changed
@@ -64,16 +68,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
     时间网格对齐，供 2D 回放渲染。仅飞行段；静态烟/火效果仍在 grenades.json。
 
     2.3.0 之前导出的包不带这两个字段，仍合法校验。
-
-## [Unreleased]
-
-### Changed
-
-- Split player and team economy typing: `player-economies.json.type` remains
-  `pistol/eco/semi/force/full`, while `rounds.json.teamAEconomy/teamBEconomy`
-  additionally allow `conversion` for the team that won R1/R13 in the following round.
-- Clarified economy classification: pistol rounds are R1/R13 only in MR12, OT is not
-  a pistol round; eco uses the sub-$1000 save bucket and force uses `spent/start >= 0.80`.
 
 ## [2.2.0] - 2026-06-01
 
