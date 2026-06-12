@@ -169,8 +169,15 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     _p("shots", 0.28)
     fires = _safe_event(p, "weapon_fire",
         other=["weapon", "total_rounds_played"],
-        player=["X", "Y", "Z", "vel_X", "vel_Y", "vel_Z", "yaw", "pitch"],
+        player=["X", "Y", "Z", "yaw", "pitch"],
     )
+    # velocity is not available via weapon_fire player extras; fetch from tick data.
+    fire_velocity_df = None
+    if fires:
+        shot_ticks = sorted({int(r["tick"]) for r in fires if int(r.get("tick") or 0) > 0})
+        if shot_ticks:
+            fire_velocity_df = _safe_ticks_df(
+                p, ["steamid", "velocity_X", "velocity_Y", "velocity_Z"], shot_ticks)
 
     _p("bomb events", 0.36)
     g_bomb = _safe_events(p,
@@ -282,6 +289,7 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
         "deaths": deaths,
         "hurts": hurts,
         "fires": fires,
+        "fire_velocity_df": fire_velocity_df,
         "blinds": g_round["player_blind"],
         "bomb_planted": g_bomb["bomb_planted"],
         "bomb_defused": g_bomb["bomb_defused"],

@@ -361,8 +361,30 @@ def _duel_track(g, grid, pidx: int) -> dict | None:
 # ── shots.json ────────────────────────────────────────────────────────────────
 
 def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -> dict | None:
-    """Columnar weapon-fire tracks grouped by (roundNumber, playerIndex)."""
+    """Columnar weapon-fire tracks grouped by (roundNumber, playerIndex).
+
+    Velocity is not available via weapon_fire event player extras in
+    demoparser2; it is fetched from tick data (velocity_X/Y/Z) and joined
+    on (tick, playerIndex).
+    """
+    import pandas as pd
+
     from .events import _active_event_round_number, _safe_float
+
+    # Build (tick, playerIndex) → (vx, vy, vz) lookup from tick data.
+    vel_lookup: dict[tuple[int, int], tuple[int, int, int]] = {}
+    vel_df = raw.get("fire_velocity_df")
+    if vel_df is not None and len(vel_df) > 0:
+        sid_series = pd.to_numeric(vel_df["steamid"], errors="coerce").fillna(0).astype("int64").astype(str)
+        for i, row in vel_df.iterrows():
+            pi = players.index_by_sid.get(sid_series.at[i])
+            if pi is None:
+                continue
+            tick = int(row["tick"])
+            vx = int(round(_safe_float(row.get("velocity_X"), 0.0)))
+            vy = int(round(_safe_float(row.get("velocity_Y"), 0.0)))
+            vz = int(round(_safe_float(row.get("velocity_Z"), 0.0)))
+            vel_lookup[(tick, pi)] = (vx, vy, vz)
 
     groups: dict[tuple[int, int], list[dict]] = {}
     for r in raw.get("fires", []):
@@ -388,6 +410,16 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
         def col(key, scale=1.0, src=rows):
             return [int(round(_safe_float(r.get(key), 0.0) * scale)) for r in src]
 
+        vx_vals: list[int] = []
+        vy_vals: list[int] = []
+        vz_vals: list[int] = []
+        for r in rows:
+            tick = int(r.get("tick") or 0)
+            vx, vy, vz = vel_lookup.get((tick, idx), (0, 0, 0))
+            vx_vals.append(vx)
+            vy_vals.append(vy)
+            vz_vals.append(vz)
+
         tracks.append({
             "roundNumber": rn,
             "playerIndex": idx,
@@ -396,9 +428,9 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
             "x": _delta(col("user_X")),
             "y": _delta(col("user_Y")),
             "z": _delta(col("user_Z")),
-            "vx": col("user_vel_X"),
-            "vy": col("user_vel_Y"),
-            "vz": col("user_vel_Z"),
+            "vx": vx_vals,
+            "vy": vy_vals,
+            "vz": vz_vals,
             "yaw": _delta(col("user_yaw", ANGLE_SCALE)),
             "pitch": _delta(col("user_pitch", ANGLE_SCALE)),
         })
