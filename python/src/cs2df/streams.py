@@ -370,21 +370,25 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
     from .events import _active_event_round_number, _safe_float
 
     # Build playerIndex → {tick: (vx, vy, vz)} lookup from tick data.
-    # _prep_frame_df handles steamid→playerIndex mapping, tick coercion, and NaN removal.
+    # _prep_frame_df handles steamid→playerIndex mapping and tick coercion.
+    # NaN velocity (data unavailable, e.g. pre-round-start) is skipped per
+    # field-contract.md NaN/Infinity rule — sentinel (0,0,0) on lookup miss.
     vel_by_player: dict[int, dict[int, tuple[int, int, int]]] = {}
     vel_df = _prep_frame_df(raw.get("fire_velocity_df"), players)
     if vel_df is not None and len(vel_df) > 0:
+        import numpy as np
+
         tick_arr = vel_df["tick"].values
         pidx_arr = vel_df["_pidx"].values
-        vx_raw = _num(vel_df["velocity_X"])
-        vy_raw = _num(vel_df["velocity_Y"])
-        vz_raw = _num(vel_df["velocity_Z"])
-        vx_arr = vx_raw.values
-        vy_arr = vy_raw.values
-        vz_arr = vz_raw.values
+        vx_arr = vel_df["velocity_X"].values
+        vy_arr = vel_df["velocity_Y"].values
+        vz_arr = vel_df["velocity_Z"].values
         for pi_np, tick_np, vx_np, vy_np, vz_np in zip(
             pidx_arr, tick_arr, vx_arr, vy_arr, vz_arr,
         ):
+            # NaN → data unavailable; skip so lookup falls through to sentinel (0,0,0).
+            if np.isnan(vx_np) or np.isnan(vy_np) or np.isnan(vz_np):
+                continue
             pi = int(pi_np)
             tick = int(tick_np)
             vel = vel_by_player.get(pi)
