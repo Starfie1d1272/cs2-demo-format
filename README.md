@@ -67,6 +67,9 @@ For every field and calculation rule, see
 
 ## v3.0.0 Highlights
 
+- **v3.0.2 adds held utility state.** `player-economies.json` can carry
+  freeze-time grenade inventory, and `replay.json` can carry per-frame held
+  grenades so replay UIs can show utility after throws or drops.
 - **`playerIndex` is the canonical player reference.** `steamId64` appears only
   in `players.json`; every other file references the row index.
 - **Team and side are derived, not repeated.** Event rows no longer carry

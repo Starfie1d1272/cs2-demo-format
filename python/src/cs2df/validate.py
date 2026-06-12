@@ -24,6 +24,7 @@ EPS = 0.02
 # stream track columns that must all share length == frameCount
 _REPLAY_COLS = ("x", "y", "z", "yaw", "pitch", "hp", "armor", "money",
                 "equipValue", "weapon", "place", "flash", "flags")
+_REPLAY_OPTIONAL_FRAME_COLS = ("grenades",)
 _DUEL_COLS = ("x", "y", "z", "yaw", "pitch", "hp", "flash")
 _SHOT_COLS = ("tick", "weapon", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch")
 
@@ -374,6 +375,7 @@ def _check_replay_stream(replay: dict, n_players: int, round_set: set,
         for pi, track in enumerate(rd_obj.get("players", [])):
             tlabel = f"{label} players[{pi}]"
             _check_track_frames(tlabel, track, _REPLAY_COLS, fc, n_players, err)
+            _check_optional_track_frames(tlabel, track, _REPLAY_OPTIONAL_FRAME_COLS, fc, err)
             for w in track.get("weapon", []):
                 if w != -1 and not (0 <= w < len(wd)):
                     err(f"{tlabel}: weapon index {w} out of weaponDict range")
@@ -388,6 +390,12 @@ def _check_replay_stream(replay: dict, n_players: int, round_set: set,
                 err(f"{label} projectiles[{qi}]: x/y/z lengths differ")
             if proj.get("throwerIndex") is not None and not _index_ok(proj.get("throwerIndex"), n_players):
                 err(f"{label} projectiles[{qi}]: throwerIndex out of range")
+
+
+def _check_optional_track_frames(label: str, track: dict, cols: tuple, frame_count: int, err) -> None:
+    bad = {c: len(track.get(c, [])) for c in cols if c in track and len(track.get(c, [])) != frame_count}
+    if bad:
+        err(f"{label}: optional column lengths != frameCount {frame_count}: {bad}")
 
 
 def _check_duels_stream(duels: dict, n_players: int, round_set: set,

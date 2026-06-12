@@ -1,6 +1,6 @@
 {
   "name": "cs2-demo-format",
-  "version": "3.0.0",
+  "version": "3.0.2",
   "description": "Implementation-neutral CS2 demo export format with ZIP schemas, TypeScript types, and validators",
   "main": "schemas/index.ts",
   "types": "schemas/index.ts",

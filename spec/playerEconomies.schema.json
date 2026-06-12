@@ -60,6 +60,21 @@
           "grenadeCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "grenades": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "flashbang",
+                "smoke",
+                "molotov",
+                "incendiary",
+                "hegrenade",
+                "decoy"
+              ]
+            },
+            "default": []
           }
         },
         "required": [

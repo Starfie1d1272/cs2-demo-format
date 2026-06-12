@@ -124,6 +124,14 @@ _GRENADE_ITEMS = {
     "Smoke Grenade", "Flashbang", "High Explosive Grenade",
     "Incendiary Grenade", "Molotov", "Decoy Grenade",
 }
+_GRENADE_ITEM_TO_TYPE = {
+    "Smoke Grenade": "smoke",
+    "Flashbang": "flashbang",
+    "High Explosive Grenade": "hegrenade",
+    "Incendiary Grenade": "incendiary",
+    "Molotov": "molotov",
+    "Decoy Grenade": "decoy",
+}
 _PISTOL_ITEMS = {
     "Glock-18", "USP-S", "P2000", "Dual Berettas", "P250", "Five-SeveN",
     "Tec-9", "CZ75-Auto", "Desert Eagle", "R8 Revolver",
@@ -141,27 +149,28 @@ _PRIMARY_ITEMS = {
 }
 
 
-def classify_inventory(items: Any) -> tuple[str | None, str | None, int]:
-    """Return (primaryWeapon, secondaryWeapon, grenadeCount) from an inventory list.
+def classify_inventory(items: Any) -> tuple[str | None, str | None, int, list[str]]:
+    """Return (primaryWeapon, secondaryWeapon, grenadeCount, grenades) from an inventory list.
 
     primary/secondary are the first matching gun in each slot; grenadeCount counts
-    grenade items (max 4 per CS2 rules, not clamped here). Non-weapons (knife, C4,
-    Zeus) and unknown names are ignored.
+    grenade items (max 4 per CS2 rules, not clamped here), while grenades preserves
+    the normalized held utility types. Non-weapons (knife, C4, Zeus) and unknown
+    names are ignored.
     """
     if not isinstance(items, (list, tuple)):
-        return None, None, 0
+        return None, None, 0, []
     primary: str | None = None
     secondary: str | None = None
-    grenades = 0
+    grenade_types: list[str] = []
     for it in items:
         name = str(it or "").strip()
         if name in _GRENADE_ITEMS:
-            grenades += 1
+            grenade_types.append(_GRENADE_ITEM_TO_TYPE[name])
         elif primary is None and name in _PRIMARY_ITEMS:
             primary = name
         elif secondary is None and name in _PISTOL_ITEMS:
             secondary = name
-    return primary, secondary, grenades
+    return primary, secondary, len(grenade_types), grenade_types
 
 
 # ── active weapon normalization ───────────────────────────────────────────────

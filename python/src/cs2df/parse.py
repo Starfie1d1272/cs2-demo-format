@@ -48,13 +48,14 @@ _GRENADE_EVENTS = [
 # (raw userid is an entity slot, not a Steam64).
 _GRENADE_PLAYER_FIELDS = ["steamid", "X", "Y", "Z"]
 
-# Per-frame props for the replay grid. No `inventory`, no `has_c4` — see module
-# docstring. `balance` is the cash account (replay `money` column);
+# Per-frame props for the replay grid. `inventory` is sampled here so replay
+# consumers can render current held utility; full-tick paths still avoid it.
+# `balance` is the cash account (replay `money` column);
 # `current_equip_value` is the equipment value (`equipValue` column).
 _REPLAY_PROPS = [
     "steamid", "team_num", "X", "Y", "Z", "yaw", "pitch",
     "health", "armor", "active_weapon_name", "flash_duration",
-    "balance", "current_equip_value", "has_defuser", "last_place_name",
+    "balance", "current_equip_value", "has_defuser", "last_place_name", "inventory",
 ]
 
 # Lean per-frame props for full-tick duel windows.

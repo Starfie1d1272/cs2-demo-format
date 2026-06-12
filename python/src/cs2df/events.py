@@ -653,7 +653,7 @@ def build_economies(raw: dict, players: PlayerDirectory, round_model: _RoundMode
         equip = int(_safe_float(r.get("current_equip_value"), 0))
         start_money = int(_safe_float(r.get("start_balance"), 0))
         eco_type = _economy_type(spent, start_money, equip, n)
-        primary, secondary, grenade_count = classify_inventory(r.get("inventory"))
+        primary, secondary, grenade_count, grenades = classify_inventory(r.get("inventory"))
 
         out.append({
             "roundNumber": n,
@@ -668,6 +668,7 @@ def build_economies(raw: dict, players: PlayerDirectory, round_model: _RoundMode
             "primaryWeapon": primary,
             "secondaryWeapon": secondary,
             "grenadeCount": grenade_count,
+            "grenades": grenades,
         })
         team_round_types.setdefault((n, key), []).append(eco_type)
 

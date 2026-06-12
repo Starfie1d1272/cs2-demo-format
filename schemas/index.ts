@@ -1,5 +1,5 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v3.0.0)
+ * cs2-demo-format — Canonical Zod Schemas (v3.0.2)
  *
  * Strict export contract for CS2 demo ZIP packages.
  * `schemas/index.ts` is the single source of truth; JSON Schema files in
@@ -276,6 +276,8 @@ export const playerEconomyRowSchema = z.object({
   primaryWeapon: nullableString,
   secondaryWeapon: nullableString,
   grenadeCount: nonNegInt,
+  /** Held grenade inventory at round freeze time; absent in older v3 exports. */
+  grenades: z.array(grenadeTypeSchema).optional().default([]),
 }).strict();
 export const playerEconomiesSchema = z.array(playerEconomyRowSchema);
 export type PlayerEconomyRow = z.infer<typeof playerEconomyRowSchema>;
@@ -464,6 +466,8 @@ export const replayPlayerTrackSchema = z.object({
   flash: intArray,
   /** plain bitfield: 1 = alive, 2 = hasBomb, 4 = hasDefuseKit */
   flags: intArray,
+  /** plain; held grenade inventory for each frame. Empty array = none/unknown. */
+  grenades: z.array(z.array(grenadeTypeSchema)).optional().default([]),
 }).strict();
 export type ReplayPlayerTrack = z.infer<typeof replayPlayerTrackSchema>;
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .enums import normalize_weapon_name
+from .enums import classify_inventory, normalize_weapon_name
 from .events import PlayerDirectory, _sid
 from .rounds import _RoundModel
 
@@ -153,6 +153,10 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
         if str(v).strip()
     }
     df["_plidx"] = df["last_place_name"].map(place_map).fillna(-1).astype("int64")
+    if "inventory" in df.columns:
+        df["_grenades"] = df["inventory"].map(lambda items: classify_inventory(items)[3])
+    else:
+        df["_grenades"] = [[] for _ in range(len(df))]
 
     bomb_ticks, bomb_carrier = build_bomb_carrier_timeline(raw, players)
     tick_values = df["tick"].to_numpy()
@@ -249,6 +253,7 @@ def _player_track(g, grid, pidx: int, bomb_ticks, bomb_carrier) -> dict | None:
     widx = np.where(present, widx, -1)
     plidx = aligned["_plidx"].fillna(-1).astype("int64").to_numpy()
     plidx = np.where(present, plidx, -1)
+    grenades = _align_grenades(aligned, present)
 
     alive = (hp > 0).astype("int64")
     has_kit = _num(aligned["has_defuser"], 0.0).to_numpy().astype(bool)
@@ -270,7 +275,22 @@ def _player_track(g, grid, pidx: int, bomb_ticks, bomb_carrier) -> dict | None:
         "place": plidx.tolist(),
         "flash": flash.tolist(),
         "flags": flags.tolist(),
+        "grenades": grenades,
     }
+
+
+def _align_grenades(aligned, present) -> list[list[str]]:
+    """Forward-fill sampled inventory lists and clear them when no player row exists."""
+    if "_grenades" not in aligned.columns:
+        return [[] for _ in range(len(aligned))]
+    filled = aligned["_grenades"].ffill().bfill()
+    out: list[list[str]] = []
+    for has_row, value in zip(present, filled, strict=False):
+        if not has_row or not isinstance(value, list):
+            out.append([])
+        else:
+            out.append([str(item) for item in value])
+    return out
 
 
 # ── duels.json ────────────────────────────────────────────────────────────────

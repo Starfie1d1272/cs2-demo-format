@@ -176,7 +176,8 @@ Tick order: `startTick < freezeEndTick ≤ endTick`.
 | `type` | economy type | 个人经济分类（算法见 rounds.json 节） |
 | `hasArmor` / `hasHelmet` / `hasDefuseKit` | boolean | |
 | `primaryWeapon` / `secondaryWeapon` | string 或 null | 武器 display name |
-| `grenadeCount` | integer ≥ 0 | |
+| `grenadeCount` | integer ≥ 0 | 持有道具数量 |
+| `grenades` | grenade type array（可缺省） | 回合 freeze time 的持有道具类型；旧 v3 导出可缺省 |
 
 ---
 
@@ -305,8 +306,8 @@ v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 包的主位置/状态流，默认 8 Hz（每 tickrate/8 tick 一帧）。每回合每玩家一条 track，
 `frameCount` 个平行数组；帧 i 的 tick = `startTick + i × tickStep`。
 
-全部整数；`x`/`y`/`z`/`yaw`/`pitch`/`money`/`equipValue` 为 delta；
-`hp`/`armor`/`flash`/`flags`/`weapon`/`place` 存每帧原始值。
+除 `grenades` 外全部整数；`x`/`y`/`z`/`yaw`/`pitch`/`money`/`equipValue` 为 delta；
+`hp`/`armor`/`flash`/`flags`/`weapon`/`place`/`grenades` 存每帧原始值。
 
 | Meta 字段 | 说明 |
 |---|---|
@@ -327,6 +328,7 @@ v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 | `place` | plain | placeDict 索引（CS2 callout 名）；-1 = 无名区域 |
 | `flash` | plain | 剩余致盲时长，0.1 秒单位（0–60） |
 | `flags` | plain | 位字段：1=alive, 2=hasBomb, 4=hasDefuseKit |
+| `grenades` | plain | 每帧当前持有道具类型数组；空数组 = 无或未知；旧 v3 导出可缺省 |
 
 **weaponDict / placeDict**：全局字符串字典，存于 replay.json 顶层。
 

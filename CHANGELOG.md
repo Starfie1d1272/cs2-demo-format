@@ -3,6 +3,15 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 3.0.2 — 2026-06-13
+
+### Added
+
+- **持有道具状态**：`player-economies.json.grenades` 在保留 `grenadeCount` 的同时，
+  新增可选的 freeze-time 持有道具类型数组；`replay.json.players[].grenades`
+  新增可选的逐帧持有道具数组，供回放/装备 UI 直接显示实际库存。旧 v3 导出包
+  缺省这些字段仍合法。
+
 ## 3.0.1 — 2026-06-13
 
 ### Fixed
