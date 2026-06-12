@@ -10,23 +10,9 @@
             "type": "integer",
             "minimum": 1
           },
-          "steamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "teamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "side": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
+          "playerIndex": {
+            "type": "integer",
+            "minimum": 0
           },
           "startMoney": {
             "type": "integer",
@@ -78,9 +64,7 @@
         },
         "required": [
           "roundNumber",
-          "steamId64",
-          "teamKey",
-          "side",
+          "playerIndex",
           "startMoney",
           "moneySpent",
           "equipmentValue",

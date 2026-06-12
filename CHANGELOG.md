@@ -1,5 +1,56 @@
 # Changelog
 
+All notable changes to cs2-demo-format are documented here.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
+
+## 3.0.0
+
+### Breaking
+
+- **`playerIndex` 替代 `steamId64`**：除 `players.json` 外，所有文件的玩家引用
+  改为 `players.json` 的 0-based 数组索引。17 位 steamId64 仅出现一次。
+- **事件行移除 `teamKey` / `side`**：由 `players[playerIndex].teamKey` +
+  `rounds[roundNumber].teamASide/teamBSide` 推导。
+- **删除 `positions-1s.json`**：合并入 `replay.json`，统一为 8 Hz 列式全状态流
+  （新增 pitch / armor / money / equipValue / flash / place / flags 列）。
+- **`kast_rounds` → `kastRounds`**（snake_case → camelCase）。
+- **`damages.victimHealthAfter` 移除**（= before − healthDamage，纯算术冗余）。
+- **`damages.victimArmorBefore` 移除**（= after + armorDamage，纯算术冗余）。
+- **`bombs.siteId` 移除**（与 site 冗余）。
+- **`teamEconomyType` 移除 `"conversion"`**：手枪局胜方下一轮队伍经济输出
+  `"full"`，conversion 语义隐含于 roundNumber 与前轮 winnerTeamKey。
+- **`shots.json` 重构**：从行式改为列式（按 round/player 分组 track，差分编码）。
+
+### Added
+
+- **差分编码**：replay / duels / shots 中位置、角度、经济序列全部整数差分编码，
+  解码用运行前缀和。
+- **纯整数流**：三个高频流零浮点。角度存 `度 × angleScale`（默认 10 = 0.1°），
+  闪光存 0.1 秒单位，坐标存整数游戏单位。
+- **`duels.json`**：满 tick 交火窗口流，供反应时间测定。以 kill/damage 事件为锚，
+  合并 `[tick − windowBeforeMs, tick + windowAfterMs]` 重叠窗口，窗口内所有存活
+  玩家以原生 tickrate 采样。可选（research profile）。
+- **`replay.json` 扩展**：新增 `placeDict` + `place` 列（CS2 callout 区域名），
+  `equipValue` 列（装备价值），`angleScale` 元参数。`money` 列改为真正的现金余额
+  （v2 positions-1s 的 money 实际存的是 equipValue）。
+- **`replayPlayerTrack.flags`** 精简为 3 位：1=alive, 2=hasBomb, 4=hasDefuseKit。
+- **`decodeDelta()` 解码辅助函数**，由 `schemas/index.ts` 导出，`parser/index.ts`
+  再导出。
+- **参考 Python 导出 CLI** (`python/src/cs2df/`)，uv 管理。向量化
+  DataFrame→numpy→delta 管线、orjson 序列化、deflate level 9。命令：
+  `cs2df export` / `cs2df validate`。hasBomb 由炸弹事件状态机推导（不再逐帧解析
+  inventory），大解析阶段性能大幅提升。
+- **v3 golden fixture** (`fixtures/v3-mid/`)：de_anubis, 21 回合, research profile。
+
+### Changed
+
+- `manifest.schemaVersion` → `"cs2-demo-format/3.0"`。
+- `replay.meta` 新增 `angleScale`（必填），删除 `sampleRate`、`tickrate` 仍为必填。
+- `replay.projectiles` 改为必填（v2.3 为 optional）；无数据时为空数组。
+- `tools/validate.py` 重写为 `cs2df validate` 薄包装。
+- `scripts/validate-fixtures.ts` 适配 v3 schema + 列式流 QA。
+- 所有文档更新至 v3。
+
 ## 2.3.0
 
 ### Minor Changes
@@ -13,9 +64,6 @@
     时间网格对齐，供 2D 回放渲染。仅飞行段；静态烟/火效果仍在 grenades.json。
 
     2.3.0 之前导出的包不带这两个字段，仍合法校验。
-
-All notable changes to cs2-demo-format are documented here.
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
 ## [Unreleased]
 

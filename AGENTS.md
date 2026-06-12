@@ -5,63 +5,53 @@ Repository guidance for Codex/Claude agents working on `cs2-demo-format`.
 ## Commands
 
 ```bash
-pnpm typecheck         # tsc --noEmit — covers schemas/, parser/, scripts/
-pnpm gen:schema        # regenerate spec/*.schema.json from Zod schemas
-pnpm validate:fixtures # strict v2 fixture validation; legacy v1 fixtures are skipped
-python3 tools/validate.py export.zip
-```
+pnpm typecheck              # tsc --noEmit — covers schemas/, parser/, scripts/
+pnpm gen:schema             # regenerate spec/*.schema.json from Zod schemas
+pnpm validate:fixtures      # strict v3 fixture validation; legacy fixtures skipped
 
-If pnpm is blocked by local approve-builds policy, use the checked out binaries directly:
+cd python && uv sync        # set up Python reference exporter
+uv run cs2df export <dem>   # export a .dem to v3 ZIP
+uv run cs2df validate <zip> # validate any v3 ZIP
 
-```bash
-./node_modules/.bin/tsc --noEmit
-./node_modules/.bin/tsx scripts/gen-json-schema.ts
-./node_modules/.bin/tsx scripts/validate-fixtures.ts
+python3 tools/validate.py export.zip  # thin wrapper (→ cs2df validate)
 ```
 
 ## Architecture
-
-This repository is an implementation-neutral ZIP data contract for parsed CS2
-demo exports. Current known implementations include `DrEAmSs59/CS2-insight-agent`
-as a producer and `RivalHub` as a consumer, but the format should stay reusable
-for other producers, importers, validators, and analysis tools.
 
 | Layer | Path | Purpose |
 |---|---|---|
 | Strict schema source | `schemas/index.ts` | Zod definitions for all ZIP files |
 | Generated contract | `spec/*.schema.json` | JSON Schema for Python/Go/etc. consumers |
 | Reference parser | `parser/index.ts` | Strict ZIP parser and schema validator |
+| Reference exporter | `python/src/cs2df/` | Vectorized Python exporter CLI (demoparser2 → v3 ZIP) |
 | Human contract | `docs/field-contract.md` | File-by-file field semantics and calculation rules |
 | Validators | `scripts/validate-fixtures.ts`, `tools/validate.py` | Schema and package-level QA |
 
 `schemas/index.ts` is the single source of truth for machine validation. After
 any schema change, run `pnpm gen:schema` and commit the updated `spec/` files.
 
-## v2 Strict Contract
+## v3 Contract
 
-- Current package version: `2.0.0`.
-- Current manifest version: `schemaVersion: "cs2-demo-format/2.0"`.
-- Strict exports must not rely on consumers to sanitize or repair data.
-- `side` is only `"t" | "ct"`; `"unknown"` in formal rounds is a producer error.
-- `teamKey` is only `"teamA" | "teamB"`; real team names live in `match.teamA.name`
-  and `match.teamB.name`, which may be `null` when the demo does not provide names.
-- Formal `roundNumber` starts at 1 and must be continuous. Warmup / round 0 rows
-  must not appear in event files.
-- Tick fields are positive integers. Unknown tick values are producer errors.
-- `NaN` / `Infinity` must never be emitted in JSON.
+- Current package version: `3.0.0`.
+- Current manifest version: `schemaVersion: "cs2-demo-format/3.0"`.
+- Player references: `playerIndex` (zero-based index into players.json) replaces
+  `steamId64` in all event/aggregate files. steamId64 appears only in players.json.
+- Team/side fields removed from event rows: derived from `players[playerIndex].teamKey`
+  + `rounds[roundNumber].teamASide/teamBSide`.
+- `positions-1s.json` merged into `replay.json` (unified 8 Hz columnar stream).
+- Delta encoding on position/angle/money arrays in columnar streams.
+- Integer-only streams: no floats in replay/duels/shots; angles in `degrees × 10`.
+- `kast_rounds` → `kastRounds`.
+- Removed: `damages.victimHealthAfter`, `damages.victimArmorBefore`, `bombs.siteId`.
+- Economy: `conversion` enum value removed; pistol-conversion rounds output `"full"`.
 
 ## Damage And ADR
 
-`damages.healthDamageRaw` is the parser's raw uncapped damage.
-`damages.healthDamage` is capped effective damage:
-
 ```text
 healthDamage = min(healthDamageRaw, victimHealthBefore)
+playerStats.damageHealth = sum(damages.healthDamage for valid enemy damage)
+playerStats.adr = damageHealth / rounds
 ```
-
-`playerStats.damageHealth` aggregates capped effective damage, and
-`playerStats.adr = damageHealth / rounds`. Utility damage uses the same capped
-effective damage basis.
 
 ## Versioning
 
@@ -74,7 +64,6 @@ effective damage basis.
 
 ## Notes
 
-- `fixtures/de_ancient-2026-05-17/` is currently a legacy v1 fixture. `pnpm
-  validate:fixtures` skips legacy fixtures until a v2 golden fixture is generated.
-- Do not commit local state directories or generated caches such as `.omc/`,
-  `.DS_Store`, `__pycache__/`, or `node_modules/`.
+- `fixtures/de_ancient-2026-05-17/` is a legacy v1 fixture, skipped by validator.
+- `fixtures/v3-mid/` is the v3 golden fixture (de_anubis, 21 rounds, research profile).
+- Do not commit `.omc/`, `.DS_Store`, `__pycache__/`, or `node_modules/`.

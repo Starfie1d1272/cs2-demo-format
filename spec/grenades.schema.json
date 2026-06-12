@@ -46,35 +46,21 @@
               "decoy"
             ]
           },
-          "throwerSteamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "throwerTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "throwerSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
+          "throwerIndex": {
+            "type": "integer",
+            "minimum": 0
           },
           "throwPosition": {
             "type": "object",
             "properties": {
               "x": {
-                "type": "number"
+                "type": "integer"
               },
               "y": {
-                "type": "number"
+                "type": "integer"
               },
               "z": {
-                "type": "number"
+                "type": "integer"
               }
             },
             "required": [
@@ -88,13 +74,13 @@
             "type": "object",
             "properties": {
               "x": {
-                "type": "number"
+                "type": "integer"
               },
               "y": {
-                "type": "number"
+                "type": "integer"
               },
               "z": {
-                "type": "number"
+                "type": "integer"
               }
             },
             "required": [
@@ -112,9 +98,7 @@
           "effectTick",
           "destroyTick",
           "grenade",
-          "throwerSteamId64",
-          "throwerTeamKey",
-          "throwerSide",
+          "throwerIndex",
           "throwPosition",
           "effectPosition"
         ],

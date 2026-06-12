@@ -40,45 +40,11 @@
               }
             ]
           },
-          "siteId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "actorSteamId64": {
+          "actorIndex": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^\\d{17}$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "actorTeamKey": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "teamA",
-                  "teamB"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "actorSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct"
-                ]
+                "type": "integer",
+                "minimum": 0
               },
               {
                 "type": "null"
@@ -89,13 +55,13 @@
             "type": "object",
             "properties": {
               "x": {
-                "type": "number"
+                "type": "integer"
               },
               "y": {
-                "type": "number"
+                "type": "integer"
               },
               "z": {
-                "type": "number"
+                "type": "integer"
               }
             },
             "required": [
@@ -111,10 +77,7 @@
           "tick",
           "type",
           "site",
-          "siteId",
-          "actorSteamId64",
-          "actorTeamKey",
-          "actorSide",
+          "actorIndex",
           "position"
         ],
         "additionalProperties": false

@@ -14,62 +14,20 @@
             "type": "integer",
             "minimum": 1
           },
-          "attackerSteamId64": {
+          "attackerIndex": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^\\d{17}$"
+                "type": "integer",
+                "minimum": 0
               },
               {
                 "type": "null"
               }
             ]
           },
-          "victimSteamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "attackerTeamKey": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "teamA",
-                  "teamB"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "victimTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "attackerSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "victimSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
+          "victimIndex": {
+            "type": "integer",
+            "minimum": 0
           },
           "weapon": {
             "type": "string",
@@ -107,16 +65,6 @@
             "minimum": 0,
             "maximum": 100
           },
-          "victimHealthAfter": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "victimArmorBefore": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
-          },
           "victimArmorAfter": {
             "type": "integer",
             "minimum": 0,
@@ -128,13 +76,13 @@
                 "type": "object",
                 "properties": {
                   "x": {
-                    "type": "number"
+                    "type": "integer"
                   },
                   "y": {
-                    "type": "number"
+                    "type": "integer"
                   },
                   "z": {
-                    "type": "number"
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -153,13 +101,13 @@
             "type": "object",
             "properties": {
               "x": {
-                "type": "number"
+                "type": "integer"
               },
               "y": {
-                "type": "number"
+                "type": "integer"
               },
               "z": {
-                "type": "number"
+                "type": "integer"
               }
             },
             "required": [
@@ -173,20 +121,14 @@
         "required": [
           "roundNumber",
           "tick",
-          "attackerSteamId64",
-          "victimSteamId64",
-          "attackerTeamKey",
-          "victimTeamKey",
-          "attackerSide",
-          "victimSide",
+          "attackerIndex",
+          "victimIndex",
           "weapon",
           "hitgroup",
           "healthDamage",
           "healthDamageRaw",
           "armorDamage",
           "victimHealthBefore",
-          "victimHealthAfter",
-          "victimArmorBefore",
           "victimArmorAfter",
           "attackerPosition",
           "victimPosition"

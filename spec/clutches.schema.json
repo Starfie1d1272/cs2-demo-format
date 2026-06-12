@@ -14,23 +14,9 @@
             "type": "integer",
             "minimum": 1
           },
-          "clutcherSteamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "clutcherTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "clutcherSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
+          "clutcherIndex": {
+            "type": "integer",
+            "minimum": 0
           },
           "opponentCount": {
             "type": "integer",
@@ -52,9 +38,7 @@
         "required": [
           "roundNumber",
           "tick",
-          "clutcherSteamId64",
-          "clutcherTeamKey",
-          "clutcherSide",
+          "clutcherIndex",
           "opponentCount",
           "won",
           "survived",

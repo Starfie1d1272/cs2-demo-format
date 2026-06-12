@@ -1,0 +1,171 @@
+"""Assemble a cs2-demo-format v3 ZIP package from a parsed demo."""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import math
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable
+
+from . import EXPORTER_NAME, SCHEMA_VERSION, __version__
+from .events import (
+    PlayerDirectory, build_blinds, build_bombs, build_clutches, build_damages,
+    build_economies, build_grenades, build_kills, build_match,
+    build_player_stats, build_players,
+)
+from .rounds import build_rounds
+from .streams import build_duels, build_replay, build_shots
+
+ProgressFn = Callable[[str, float], None]
+
+_FILENAMES = {
+    "match": "match.json",
+    "players": "players.json",
+    "rounds": "rounds.json",
+    "playerStats": "player-stats.json",
+    "playerEconomies": "player-economies.json",
+    "kills": "kills.json",
+    "damages": "damages.json",
+    "blinds": "blinds.json",
+    "bombs": "bombs.json",
+    "grenades": "grenades.json",
+    "clutches": "clutches.json",
+    "shots": "shots.json",
+    "replay": "replay.json",
+    "duels": "duels.json",
+}
+
+
+def export_demo(dem_path: str, *, research: bool = False, sample_rate: int = 8,
+                window_before_ms: int = 2000, window_after_ms: int = 1000,
+                progress: ProgressFn | None = None) -> bytes:
+    """Parse `dem_path` and return the cs2-demo-format v3 ZIP as bytes."""
+    from .parse import parse_demo
+
+    try:
+        demo_hash: str | None = _sha256_hex(dem_path)
+    except Exception:
+        demo_hash = None
+
+    scaled = (lambda stage, frac: progress(stage, frac * 0.9)) if progress else None
+    raw = parse_demo(dem_path, sample_rate=sample_rate, research=research,
+                     window_before_ms=window_before_ms,
+                     window_after_ms=window_after_ms, progress=scaled)
+
+    if progress:
+        progress("build package", 0.92)
+    return build_package(raw, dem_path, demo_hash,
+                         window_before_ms=window_before_ms,
+                         window_after_ms=window_after_ms)
+
+
+def build_package(raw: dict[str, Any], dem_path: str, demo_hash: str | None, *,
+                  window_before_ms: int = 2000, window_after_ms: int = 1000) -> bytes:
+    """Pure assembly: raw parse output → v3 ZIP bytes (testable without demoparser2)."""
+    tickrate = int(raw.get("tickrate") or 64)
+    sample_rate = int(raw.get("sample_rate") or 8)
+
+    players = build_players(raw)
+    team_map = {p["steamId64"]: p["teamKey"] for p in players.rows}
+    rounds, round_model = build_rounds(raw, team_map)
+
+    kills = build_kills(raw, players, round_model)
+    grenades = build_grenades(raw, players, round_model)
+    flash_lookup = {
+        (g["roundNumber"], g["effectTick"]): g["grenadeId"]
+        for g in grenades if g["grenade"] == "flashbang" and g["grenadeId"]
+    }
+    blinds = build_blinds(raw, players, round_model, flash_lookup=flash_lookup)
+    damages = build_damages(raw, players, round_model)
+    clutches = build_clutches(kills, rounds, players)
+    economies = build_economies(raw, players, round_model, rounds)  # mutates rounds economy
+    player_stats = build_player_stats(raw, players, round_model, rounds,
+                                      kills_list=kills, blinds_list=blinds,
+                                      damages_list=damages, clutches_list=clutches)
+    bombs = build_bombs(raw, players, round_model)
+    match_json = build_match(raw, rounds)
+
+    shots = build_shots(raw, players, round_model)
+    replay = build_replay(raw, players, round_model, tickrate, sample_rate)
+    duels = build_duels(raw, players, round_model, tickrate, kills, damages,
+                        window_before_ms, window_after_ms)
+
+    data_by_key: dict[str, Any] = {
+        "match": match_json,
+        "players": players.rows,
+        "rounds": rounds,
+        "playerStats": player_stats,
+        "playerEconomies": economies,
+        "kills": kills,
+        "damages": damages,
+        "blinds": blinds,
+        "bombs": bombs,
+        "grenades": grenades,
+        "clutches": clutches,
+    }
+    if shots:
+        data_by_key["shots"] = shots
+    if replay:
+        data_by_key["replay"] = replay
+    if duels:
+        data_by_key["duels"] = duels
+
+    manifest = {
+        "schemaVersion": SCHEMA_VERSION,
+        "exporter": {"name": EXPORTER_NAME, "version": __version__},
+        "parser": {"name": "demoparser2", "version": _demoparser2_version()},
+        "demo": {"hash": demo_hash, "sourceFileName": Path(dem_path).name},
+        "mapName": str(raw.get("header", {}).get("map_name") or "unknown"),
+        "tickrate": tickrate,
+        "exportedAt": datetime.now(timezone.utc).isoformat(),
+        "files": {key: _FILENAMES[key] for key in data_by_key},
+    }
+
+    return _write_zip(manifest, data_by_key)
+
+
+def _write_zip(manifest: dict, data_by_key: dict[str, Any]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        zf.writestr("manifest.json", _dumps(manifest))
+        for key, data in data_by_key.items():
+            zf.writestr(_FILENAMES[key], _dumps(data))
+    return buf.getvalue()
+
+
+def _dumps(data: Any) -> bytes:
+    """Minified JSON via orjson (fast, no NaN — raises on non-finite floats)."""
+    import orjson
+
+    return orjson.dumps(_json_safe(data))
+
+
+def _json_safe(obj):
+    """Replace float NaN/inf with None (orjson would raise otherwise)."""
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    return obj
+
+
+def _sha256_hex(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _demoparser2_version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("demoparser2")
+    except Exception:
+        return "unknown"

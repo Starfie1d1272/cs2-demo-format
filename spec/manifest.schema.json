@@ -6,7 +6,7 @@
       "properties": {
         "schemaVersion": {
           "type": "string",
-          "const": "cs2-demo-format/2.0"
+          "const": "cs2-demo-format/3.0"
         },
         "exporter": {
           "type": "object",
@@ -134,11 +134,11 @@
               "type": "string",
               "minLength": 1
             },
-            "positions1s": {
+            "replay": {
               "type": "string",
               "minLength": 1
             },
-            "replay": {
+            "duels": {
               "type": "string",
               "minLength": 1
             }

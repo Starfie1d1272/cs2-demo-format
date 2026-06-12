@@ -6,16 +6,9 @@
       "items": {
         "type": "object",
         "properties": {
-          "steamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "teamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
+          "playerIndex": {
+            "type": "integer",
+            "minimum": 0
           },
           "rounds": {
             "type": "integer",
@@ -178,7 +171,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "kast_rounds": {
+          "kastRounds": {
             "type": "integer",
             "minimum": 0
           },
@@ -204,8 +197,7 @@
           }
         },
         "required": [
-          "steamId64",
-          "teamKey",
+          "playerIndex",
           "rounds",
           "kills",
           "deaths",
@@ -246,7 +238,7 @@
           "wallbangKillCount",
           "noScopeKillCount",
           "collateralKillCount",
-          "kast_rounds",
+          "kastRounds",
           "flashAssistCount",
           "enemyFlashDurationSeconds",
           "teamFlashDurationSeconds",

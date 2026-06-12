@@ -18,16 +18,27 @@
             "coordScale": {
               "type": "integer",
               "minimum": 1
+            },
+            "angleScale": {
+              "type": "integer",
+              "minimum": 1
             }
           },
           "required": [
             "sampleRate",
             "tickrate",
-            "coordScale"
+            "coordScale",
+            "angleScale"
           ],
           "additionalProperties": false
         },
         "weaponDict": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "placeDict": {
           "type": "array",
           "items": {
             "type": "string"
@@ -59,23 +70,9 @@
                 "items": {
                   "type": "object",
                   "properties": {
-                    "steamId64": {
-                      "type": "string",
-                      "pattern": "^\\d{17}$"
-                    },
-                    "teamKey": {
-                      "type": "string",
-                      "enum": [
-                        "teamA",
-                        "teamB"
-                      ]
-                    },
-                    "side": {
-                      "type": "string",
-                      "enum": [
-                        "t",
-                        "ct"
-                      ]
+                    "playerIndex": {
+                      "type": "integer",
+                      "minimum": 0
                     },
                     "x": {
                       "type": "array",
@@ -98,17 +95,37 @@
                     "yaw": {
                       "type": "array",
                       "items": {
-                        "type": "integer",
-                        "minimum": -180,
-                        "maximum": 180
+                        "type": "integer"
+                      }
+                    },
+                    "pitch": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
                       }
                     },
                     "hp": {
                       "type": "array",
                       "items": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 100
+                        "type": "integer"
+                      }
+                    },
+                    "armor": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "money": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "equipValue": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
                       }
                     },
                     "weapon": {
@@ -118,26 +135,102 @@
                         "minimum": -1
                       }
                     },
-                    "flags": {
+                    "place": {
                       "type": "array",
                       "items": {
                         "type": "integer",
-                        "minimum": 0,
-                        "maximum": 15
+                        "minimum": -1
+                      }
+                    },
+                    "flash": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "flags": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
                       }
                     }
                   },
                   "required": [
-                    "steamId64",
-                    "teamKey",
-                    "side",
+                    "playerIndex",
                     "x",
                     "y",
                     "z",
                     "yaw",
+                    "pitch",
                     "hp",
+                    "armor",
+                    "money",
+                    "equipValue",
                     "weapon",
+                    "place",
+                    "flash",
                     "flags"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "projectiles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "grenade": {
+                      "type": "string",
+                      "enum": [
+                        "flashbang",
+                        "smoke",
+                        "molotov",
+                        "incendiary",
+                        "hegrenade",
+                        "decoy"
+                      ]
+                    },
+                    "throwerIndex": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "startTick": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "x": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "y": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "z": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "grenade",
+                    "throwerIndex",
+                    "startTick",
+                    "x",
+                    "y",
+                    "z"
                   ],
                   "additionalProperties": false
                 }
@@ -148,7 +241,8 @@
               "startTick",
               "tickStep",
               "frameCount",
-              "players"
+              "players",
+              "projectiles"
             ],
             "additionalProperties": false
           }
@@ -157,6 +251,7 @@
       "required": [
         "meta",
         "weaponDict",
+        "placeDict",
         "rounds"
       ],
       "additionalProperties": false

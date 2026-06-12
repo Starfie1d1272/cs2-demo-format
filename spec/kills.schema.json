@@ -14,83 +14,41 @@
             "type": "integer",
             "minimum": 1
           },
-          "killerSteamId64": {
+          "killerIndex": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^\\d{17}$"
+                "type": "integer",
+                "minimum": 0
               },
               {
                 "type": "null"
               }
             ]
           },
-          "victimSteamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
+          "victimIndex": {
+            "type": "integer",
+            "minimum": 0
           },
-          "assisterSteamId64": {
+          "assisterIndex": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^\\d{17}$"
+                "type": "integer",
+                "minimum": 0
               },
               {
                 "type": "null"
               }
             ]
           },
-          "flashAssisterSteamId64": {
+          "flashAssisterIndex": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^\\d{17}$"
+                "type": "integer",
+                "minimum": 0
               },
               {
                 "type": "null"
               }
-            ]
-          },
-          "killerTeamKey": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "teamA",
-                  "teamB"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "victimTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "killerSide": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": [
-                  "t",
-                  "ct"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "victimSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
             ]
           },
           "weapon": {
@@ -137,13 +95,13 @@
                 "type": "object",
                 "properties": {
                   "x": {
-                    "type": "number"
+                    "type": "integer"
                   },
                   "y": {
-                    "type": "number"
+                    "type": "integer"
                   },
                   "z": {
-                    "type": "number"
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -162,13 +120,13 @@
             "type": "object",
             "properties": {
               "x": {
-                "type": "number"
+                "type": "integer"
               },
               "y": {
-                "type": "number"
+                "type": "integer"
               },
               "z": {
-                "type": "number"
+                "type": "integer"
               }
             },
             "required": [
@@ -182,14 +140,10 @@
         "required": [
           "roundNumber",
           "tick",
-          "killerSteamId64",
-          "victimSteamId64",
-          "assisterSteamId64",
-          "flashAssisterSteamId64",
-          "killerTeamKey",
-          "victimTeamKey",
-          "killerSide",
-          "victimSide",
+          "killerIndex",
+          "victimIndex",
+          "assisterIndex",
+          "flashAssisterIndex",
           "weapon",
           "killerActiveWeapon",
           "victimActiveWeapon",

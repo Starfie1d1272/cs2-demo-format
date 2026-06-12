@@ -1,0 +1,194 @@
+{
+  "$ref": "#/definitions/duels",
+  "definitions": {
+    "duels": {
+      "type": "object",
+      "properties": {
+        "meta": {
+          "type": "object",
+          "properties": {
+            "tickrate": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sampleRate": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "coordScale": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "angleScale": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "windowBeforeMs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "windowAfterMs": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "tickrate",
+            "sampleRate",
+            "coordScale",
+            "angleScale",
+            "windowBeforeMs",
+            "windowAfterMs"
+          ],
+          "additionalProperties": false
+        },
+        "windows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "roundNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "startTick": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "tickStep": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "frameCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "anchors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "kill",
+                        "damage"
+                      ]
+                    },
+                    "tick": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "attackerIndex": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "victimIndex": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "tick",
+                    "attackerIndex",
+                    "victimIndex"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 1
+              },
+              "players": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "playerIndex": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "x": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "y": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "z": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "yaw": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "pitch": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "hp": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    },
+                    "flash": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "playerIndex",
+                    "x",
+                    "y",
+                    "z",
+                    "yaw",
+                    "pitch",
+                    "hp",
+                    "flash"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "roundNumber",
+              "startTick",
+              "tickStep",
+              "frameCount",
+              "anchors",
+              "players"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "meta",
+        "windows"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

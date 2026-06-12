@@ -1,11 +1,31 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v2.0.0)
+ * cs2-demo-format — Canonical Zod Schemas (v3.0.0)
  *
  * Strict export contract for CS2 demo ZIP packages.
  * `schemas/index.ts` is the single source of truth; JSON Schema files in
  * `spec/` are generated from these definitions.
  *
- * Schema version string: "cs2-demo-format/2.0".
+ * Schema version string: "cs2-demo-format/3.0".
+ *
+ * ── v3 core conventions ──────────────────────────────────────────────────────
+ *
+ * Player references: every file except `players.json` refers to players by
+ * `playerIndex` — the row index into the `players.json` array. The 17-digit
+ * steamId64 appears exactly once per player, in players.json.
+ *
+ * Team/side derivation: per-row `teamKey` / `side` fields were removed in v3.
+ * Consumers derive them: `players[playerIndex].teamKey` gives the team, and
+ * `rounds[roundNumber].teamASide / teamBSide` gives the side for that round.
+ *
+ * Integer-only payloads: positions are integer game units, angles are integers
+ * in `degrees × angleScale` (meta-declared, default 10 = 0.1°), durations in
+ * event files are seconds (float allowed there only), flash columns in streams
+ * are tenths of a second. High-frequency streams contain no floats at all.
+ *
+ * Delta encoding: array fields documented as "delta" store the first element
+ * as an absolute value and every subsequent element as the difference from the
+ * previous frame: stored[0] = v[0], stored[i] = v[i] − v[i−1]. Decode with a
+ * running prefix sum. Non-delta arrays store plain per-frame values.
  */
 
 import { z } from "zod";
@@ -16,7 +36,15 @@ export const steamId64Schema = z.string().regex(/^\d{17}$/);
 export const teamKeySchema = z.enum(["teamA", "teamB"]);
 export const sideSchema = z.enum(["t", "ct"]);
 export const economyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full"]);
-export const teamEconomyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full", "conversion"]);
+/**
+ * Team-level economy summary per round (majority vote of the five individual
+ * player economy types). Pistol-conversion rounds (R2 / R14 where the team
+ * won the previous pistol round) are classified as `"full"` — the winners
+ * have enough money for rifles and equipment, and the losers are on eco or
+ * force; the "won pistol" context is implicit from `roundNumber` and the
+ * `winnerTeamKey` of the previous round.
+ */
+export const teamEconomyTypeSchema = z.enum(["pistol", "eco", "semi", "force", "full"]);
 export const endReasonSchema = z.enum([
   "t_win",
   "ct_win",
@@ -54,10 +82,11 @@ export const hitgroupSchema = z.enum([
   "neck",
 ]);
 
+/** Integer position in game units (sub-unit precision is parser noise). */
 export const vec3Schema = z.object({
-  x: z.number(),
-  y: z.number(),
-  z: z.number(),
+  x: z.number().int(),
+  y: z.number().int(),
+  z: z.number().int(),
 }).strict();
 
 const nonNegInt = z.number().int().min(0);
@@ -66,15 +95,23 @@ const nonNegNumber = z.number().min(0);
 const percentage = z.number().min(0).max(100);
 const weaponString = z.string().min(1);
 const nullableString = z.string().nullable();
-const nullableSteamId64 = steamId64Schema.nullable();
-const nullableTeamKey = teamKeySchema.nullable();
-const nullableSide = sideSchema.nullable();
+
+/** Index into the players.json array. */
+export const playerIndexSchema = nonNegInt;
+const nullablePlayerIndex = playerIndexSchema.nullable();
 const nullableVec3 = vec3Schema.nullable();
+
+/** Plain integer array (per-frame values, no delta). */
+const intArray = z.array(z.number().int());
+/** Delta-encoded integer array: [0] absolute, [i] = v[i] − v[i−1]. */
+const deltaIntArray = z.array(z.number().int());
+/** Dictionary-index array; -1 = none/unknown. */
+const dictIndexArray = z.array(z.number().int().min(-1));
 
 // ── manifest.json ─────────────────────────────────────────────────────────────
 
 export const manifestSchema = z.object({
-  schemaVersion: z.literal("cs2-demo-format/2.0"),
+  schemaVersion: z.literal("cs2-demo-format/3.0"),
   exporter: z.object({
     name: z.string().min(1),
     version: z.string().min(1),
@@ -103,8 +140,10 @@ export const manifestSchema = z.object({
     grenades: z.string().min(1),
     clutches: z.string().min(1),
     shots: z.string().min(1).optional(),
-    positions1s: z.string().min(1).optional(),
     replay: z.string().min(1).optional(),
+    // Full-tick combat-window stream for reaction-time research (optional;
+    // produced by research-profile exports).
+    duels: z.string().min(1).optional(),
   }).strict(),
 }).strict();
 export type Manifest = z.infer<typeof manifestSchema>;
@@ -130,6 +169,10 @@ export type TeamSummary = z.infer<typeof teamSummarySchema>;
 export type Match = z.infer<typeof matchSchema>;
 
 // ── players.json ──────────────────────────────────────────────────────────────
+//
+// Row order is normative: `playerIndex` fields across the whole package are
+// indexes into this array. Producers must keep the array stable within a
+// package (sorted by teamKey then steamId64 is recommended but not required).
 
 export const playerRowSchema = z.object({
   steamId64: steamId64Schema,
@@ -140,6 +183,9 @@ export const playersSchema = z.array(playerRowSchema);
 export type PlayerRow = z.infer<typeof playerRowSchema>;
 
 // ── rounds.json ───────────────────────────────────────────────────────────────
+//
+// Kept fully denormalized: this file is the derivation source for per-round
+// side lookups (playerIndex → teamKey → teamASide/teamBSide).
 
 export const teamEconomySchema = teamEconomyTypeSchema;
 
@@ -164,8 +210,7 @@ export type RoundRow = z.infer<typeof roundRowSchema>;
 // ── player-stats.json ─────────────────────────────────────────────────────────
 
 export const playerStatsRowSchema = z.object({
-  steamId64: steamId64Schema,
-  teamKey: teamKeySchema,
+  playerIndex: playerIndexSchema,
   rounds: nonNegInt,
   kills: nonNegInt,
   deaths: nonNegInt,
@@ -206,7 +251,7 @@ export const playerStatsRowSchema = z.object({
   wallbangKillCount: nonNegInt,
   noScopeKillCount: nonNegInt,
   collateralKillCount: nonNegInt,
-  kast_rounds: nonNegInt,
+  kastRounds: nonNegInt,
   flashAssistCount: nonNegInt,
   enemyFlashDurationSeconds: nonNegNumber,
   teamFlashDurationSeconds: nonNegNumber,
@@ -220,9 +265,7 @@ export type PlayerStatsRow = z.infer<typeof playerStatsRowSchema>;
 
 export const playerEconomyRowSchema = z.object({
   roundNumber: positiveInt,
-  steamId64: steamId64Schema,
-  teamKey: teamKeySchema,
-  side: sideSchema,
+  playerIndex: playerIndexSchema,
   startMoney: nonNegInt,
   moneySpent: nonNegInt,
   equipmentValue: nonNegInt,
@@ -242,14 +285,10 @@ export type PlayerEconomyRow = z.infer<typeof playerEconomyRowSchema>;
 export const killRowSchema = z.object({
   roundNumber: positiveInt,
   tick: positiveInt,
-  killerSteamId64: nullableSteamId64,
-  victimSteamId64: steamId64Schema,
-  assisterSteamId64: nullableSteamId64,
-  flashAssisterSteamId64: nullableSteamId64,
-  killerTeamKey: nullableTeamKey,
-  victimTeamKey: teamKeySchema,
-  killerSide: nullableSide,
-  victimSide: sideSchema,
+  killerIndex: nullablePlayerIndex,
+  victimIndex: playerIndexSchema,
+  assisterIndex: nullablePlayerIndex,
+  flashAssisterIndex: nullablePlayerIndex,
   weapon: weaponString,
   killerActiveWeapon: nullableString,
   victimActiveWeapon: nullableString,
@@ -271,12 +310,8 @@ export type KillRow = z.infer<typeof killRowSchema>;
 export const damageRowSchema = z.object({
   roundNumber: positiveInt,
   tick: positiveInt,
-  attackerSteamId64: nullableSteamId64,
-  victimSteamId64: steamId64Schema,
-  attackerTeamKey: nullableTeamKey,
-  victimTeamKey: teamKeySchema,
-  attackerSide: nullableSide,
-  victimSide: sideSchema,
+  attackerIndex: nullablePlayerIndex,
+  victimIndex: playerIndexSchema,
   weapon: weaponString,
   hitgroup: hitgroupSchema,
   /**
@@ -288,8 +323,8 @@ export const damageRowSchema = z.object({
   healthDamageRaw: nonNegInt,
   armorDamage: nonNegInt,
   victimHealthBefore: nonNegInt.max(100),
-  victimHealthAfter: nonNegInt.max(100),
-  victimArmorBefore: nonNegInt.max(100),
+  // victimHealthAfter = victimHealthBefore − healthDamage (removed in v3);
+  // victimArmorBefore = victimArmorAfter + armorDamage (removed in v3).
   victimArmorAfter: nonNegInt.max(100),
   attackerPosition: nullableVec3,
   victimPosition: vec3Schema,
@@ -303,12 +338,8 @@ export const blindRowSchema = z.object({
   roundNumber: positiveInt,
   tick: positiveInt,
   flashId: nullableString,
-  flasherSteamId64: steamId64Schema,
-  flashedSteamId64: steamId64Schema,
-  flasherTeamKey: teamKeySchema,
-  flashedTeamKey: teamKeySchema,
-  flasherSide: sideSchema,
-  flashedSide: sideSchema,
+  flasherIndex: playerIndexSchema,
+  flashedIndex: playerIndexSchema,
   durationSeconds: nonNegNumber.max(6),
 }).strict();
 export const blindsSchema = z.array(blindRowSchema);
@@ -321,10 +352,7 @@ export const bombRowSchema = z.object({
   tick: positiveInt,
   type: bombEventTypeSchema,
   site: z.enum(["a", "b"]).nullable(),
-  siteId: nullableString,
-  actorSteamId64: nullableSteamId64,
-  actorTeamKey: nullableTeamKey,
-  actorSide: nullableSide,
+  actorIndex: nullablePlayerIndex,
   position: vec3Schema,
 }).strict();
 export const bombsSchema = z.array(bombRowSchema);
@@ -335,9 +363,7 @@ export type BombRow = z.infer<typeof bombRowSchema>;
 export const clutchRowSchema = z.object({
   roundNumber: positiveInt,
   tick: positiveInt,
-  clutcherSteamId64: steamId64Schema,
-  clutcherTeamKey: teamKeySchema,
-  clutcherSide: sideSchema,
+  clutcherIndex: playerIndexSchema,
   opponentCount: z.number().int().min(1).max(5),
   won: z.boolean(),
   survived: z.boolean(),
@@ -355,99 +381,105 @@ export const grenadeRowSchema = z.object({
   effectTick: positiveInt,
   destroyTick: positiveInt.nullable(),
   grenade: grenadeTypeSchema,
-  throwerSteamId64: steamId64Schema,
-  throwerTeamKey: teamKeySchema,
-  throwerSide: sideSchema,
+  throwerIndex: playerIndexSchema,
   throwPosition: vec3Schema,
   effectPosition: vec3Schema,
 }).strict();
 export const grenadesSchema = z.array(grenadeRowSchema);
 export type GrenadeRow = z.infer<typeof grenadeRowSchema>;
 
-// ── shots.json ────────────────────────────────────────────────────────────────
-
-export const shotRowSchema = z.object({
-  roundNumber: positiveInt,
-  tick: positiveInt,
-  steamId64: steamId64Schema,
-  teamKey: teamKeySchema,
-  side: sideSchema,
-  weapon: weaponString,
-  position: vec3Schema,
-  velocity: vec3Schema,
-  yaw: z.number().min(-180).max(180),
-  pitch: z.number().min(-90).max(90),
-}).strict();
-export const shotsSchema = z.array(shotRowSchema);
-export type ShotRow = z.infer<typeof shotRowSchema>;
-
-// ── positions-1s.json ─────────────────────────────────────────────────────────
-
-export const positionRowSchema = z.object({
-  roundNumber: positiveInt,
-  tick: positiveInt,
-  steamId64: steamId64Schema,
-  teamKey: teamKeySchema,
-  side: sideSchema,
-  alive: z.boolean(),
-  position: nullableVec3,
-  yaw: z.number().min(-180).max(180).nullable(),
-  pitch: z.number().min(-90).max(90).nullable(),
-  health: nonNegInt.max(100),
-  armor: nonNegInt.max(100),
-  money: nonNegInt.max(16000),
-  activeWeapon: nullableString,
-  flashDurationRemaining: nonNegNumber.max(6),
-  hasBomb: z.boolean(),
-  hasDefuseKit: z.boolean(),
-  // CS2 自带的 callout 区域名（"Middle" / "Apartments" / "BombsiteA" …）。
-  // 选手处于两个 callout 之间时无名 → null（绝不 coerce 成 ""）。
-  // 可选：v2.3.0 新增的加性字段，2.3.0 之前导出的包不带它仍合法。
-  lastPlaceName: nullableString.optional(),
-}).strict();
-export const positionsSchema = z.array(positionRowSchema);
-export type PositionRow = z.infer<typeof positionRowSchema>;
-
-// ── replay.json (compact 2D-replay stream) ────────────────────────────────────
+// ── shots.json (columnar weapon-fire stream) ──────────────────────────────────
 //
-// A columnar, quantized player-movement stream tuned for a 2D replay viewer —
-// distinct from positions-1s (which stays at 1 Hz for analytics/heatmaps).
+// One track per (roundNumber, playerIndex); parallel arrays share one length.
+// `tick`, `x`, `y`, `z`, `yaw`, `pitch` are delta-encoded; velocity is plain
+// per-shot (frame-to-frame velocity is uncorrelated, deltas would not help).
+// Angles are integers in degrees × meta.angleScale.
+
+export const shotTrackSchema = z.object({
+  roundNumber: positiveInt,
+  playerIndex: playerIndexSchema,
+  /** delta; absolute ticks of each shot */
+  tick: deltaIntArray,
+  /** index into weaponDict */
+  weapon: dictIndexArray,
+  /** delta; shooter position in game units */
+  x: deltaIntArray,
+  y: deltaIntArray,
+  z: deltaIntArray,
+  /** per-shot velocity in game units/s (plain) */
+  vx: intArray,
+  vy: intArray,
+  vz: intArray,
+  /** delta; view angles in degrees × angleScale */
+  yaw: deltaIntArray,
+  pitch: deltaIntArray,
+}).strict();
+export type ShotTrack = z.infer<typeof shotTrackSchema>;
+
+export const shotsSchema = z.object({
+  meta: z.object({
+    /** game units per stored coordinate unit (1 = raw rounded) */
+    coordScale: positiveInt,
+    /** stored angle = degrees × angleScale (10 = 0.1° resolution) */
+    angleScale: positiveInt,
+  }).strict(),
+  weaponDict: z.array(z.string()),
+  tracks: z.array(shotTrackSchema),
+}).strict();
+export type Shots = z.infer<typeof shotsSchema>;
+
+// ── replay.json (unified columnar player-state stream) ───────────────────────
+//
+// THE positional/state stream of the package (v3 merged the former
+// positions-1s.json into this file). Default rate is 8 Hz; consumers needing
+// ~1 Hz analytics (heatmaps, economy curves) stride by meta.sampleRate.
 //
 // Per round, each player carries parallel arrays of length `frameCount`. The
-// tick of frame `i` is `startTick + i * tickStep`, so per-frame tick/round are
-// implied, not stored. Coordinates are integers in game units divided by
-// `meta.coordScale` (1 = raw rounded). Static identity (steamId64/teamKey/side)
-// is stored once per player per round, never per frame.
+// tick of frame `i` is `startTick + i * tickStep`. While a player is dead or
+// disconnected (flags alive bit = 0) the per-frame values are unspecified;
+// producers SHOULD repeat the last live value so delta streams stay compact.
+
 export const replayPlayerTrackSchema = z.object({
-  steamId64: steamId64Schema,
-  teamKey: teamKeySchema,
-  side: sideSchema,
-  x: z.array(z.number().int()),
-  y: z.array(z.number().int()),
-  z: z.array(z.number().int()),
-  // facing angle in whole degrees, -180..180
-  yaw: z.array(z.number().int().min(-180).max(180)),
-  hp: z.array(nonNegInt.max(100)),
-  // index into `weaponDict`; -1 = none/unknown
-  weapon: z.array(z.number().int().min(-1)),
-  // bitfield per frame: 1=alive, 2=hasBomb, 4=hasDefuseKit, 8=flashed
-  flags: z.array(nonNegInt.max(15)),
+  playerIndex: playerIndexSchema,
+  /** delta; position in game units / meta.coordScale */
+  x: deltaIntArray,
+  y: deltaIntArray,
+  z: deltaIntArray,
+  /** delta; view angles in degrees × meta.angleScale */
+  yaw: deltaIntArray,
+  pitch: deltaIntArray,
+  /** plain; health 0–100 */
+  hp: intArray,
+  /** plain; armor 0–100 */
+  armor: intArray,
+  /** delta; cash balance */
+  money: deltaIntArray,
+  /** delta; current equipment value */
+  equipValue: deltaIntArray,
+  /** index into weaponDict; -1 = none/unknown */
+  weapon: dictIndexArray,
+  /** index into placeDict (CS2 callout names); -1 = between callouts */
+  place: dictIndexArray,
+  /** plain; remaining flash-blind duration in tenths of a second (0–60) */
+  flash: intArray,
+  /** plain bitfield: 1 = alive, 2 = hasBomb, 4 = hasDefuseKit */
+  flags: intArray,
 }).strict();
 export type ReplayPlayerTrack = z.infer<typeof replayPlayerTrackSchema>;
 
 // A single thrown grenade's in-flight path, on the SAME time grid as player
-// tracks. Frame `i` is at `startTick + i * tickStep` (the round's tickStep), so
-// the path lines up with player frames for synchronized rendering. Covers the
-// flight phase only (throw → detonate); the static effect afterwards (smoke
-// cloud / fire area) lives in grenades.json via effectPosition + destroyTick.
-// Coords are integers = game units / coordScale (same convention as players).
+// tracks. Frame `i` is at `startTick + i * tickStep` (the round's tickStep).
+// Covers the flight phase only (throw → detonate); the static effect afterwards
+// (smoke cloud / fire area) lives in grenades.json via effectPosition +
+// destroyTick. Coordinates follow the same coordScale/delta convention.
 export const replayProjectileSchema = z.object({
   grenade: grenadeTypeSchema,
-  throwerSteamId64: nullableSteamId64,
+  throwerIndex: nullablePlayerIndex,
   startTick: positiveInt,
-  x: z.array(z.number().int()),
-  y: z.array(z.number().int()),
-  z: z.array(z.number().int()),
+  /** delta; projectile position in game units / meta.coordScale */
+  x: deltaIntArray,
+  y: deltaIntArray,
+  z: deltaIntArray,
 }).strict();
 export type ReplayProjectile = z.infer<typeof replayProjectileSchema>;
 
@@ -457,24 +489,84 @@ export const replayRoundSchema = z.object({
   tickStep: positiveInt,
   frameCount: nonNegInt,
   players: z.array(replayPlayerTrackSchema),
-  // Optional (added in v2.3.0): grenade flight paths for this round. Packages
-  // exported before 2.3.0 omit it; renderers should treat absent as "no data".
-  projectiles: z.array(replayProjectileSchema).optional(),
+  projectiles: z.array(replayProjectileSchema),
 }).strict();
 export type ReplayRound = z.infer<typeof replayRoundSchema>;
 
 export const replaySchema = z.object({
   meta: z.object({
-    // frames per second of game time captured (e.g. 8)
+    /** frames per second of game time captured (e.g. 8) */
     sampleRate: positiveInt,
     tickrate: positiveInt,
-    // game units per stored coordinate unit (1 = raw value rounded to int)
+    /** game units per stored coordinate unit (1 = raw value rounded to int) */
     coordScale: positiveInt,
+    /** stored angle = degrees × angleScale (10 = 0.1° resolution) */
+    angleScale: positiveInt,
   }).strict(),
   weaponDict: z.array(z.string()),
+  placeDict: z.array(z.string()),
   rounds: z.array(replayRoundSchema),
 }).strict();
 export type Replay = z.infer<typeof replaySchema>;
+
+// ── duels.json (full-tick combat-window stream, research profile) ────────────
+//
+// High-frequency sampling around combat for reaction-time and duel analysis.
+// Windows are built per round from kill/damage anchor events: each anchor
+// spans [tick − windowBeforeMs, tick + windowAfterMs]; overlapping spans in
+// the same round are merged into one window. All players alive anywhere in
+// the window are included for the whole window. Default sampleRate equals the
+// demo tickrate (tickStep = 1). Combine with shots.json (exact fire ticks) and
+// the flash column to measure visual-stimulus → first-shot latency.
+
+export const duelAnchorSchema = z.object({
+  kind: z.enum(["kill", "damage"]),
+  tick: positiveInt,
+  attackerIndex: nullablePlayerIndex,
+  victimIndex: playerIndexSchema,
+}).strict();
+export type DuelAnchor = z.infer<typeof duelAnchorSchema>;
+
+export const duelPlayerTrackSchema = z.object({
+  playerIndex: playerIndexSchema,
+  /** delta; position in game units / meta.coordScale */
+  x: deltaIntArray,
+  y: deltaIntArray,
+  z: deltaIntArray,
+  /** delta; view angles in degrees × meta.angleScale */
+  yaw: deltaIntArray,
+  pitch: deltaIntArray,
+  /** plain; health 0–100 (0 = dead) */
+  hp: intArray,
+  /** plain; remaining flash-blind duration in tenths of a second (0–60) */
+  flash: intArray,
+}).strict();
+export type DuelPlayerTrack = z.infer<typeof duelPlayerTrackSchema>;
+
+export const duelWindowSchema = z.object({
+  roundNumber: positiveInt,
+  startTick: positiveInt,
+  tickStep: positiveInt,
+  frameCount: nonNegInt,
+  anchors: z.array(duelAnchorSchema).min(1),
+  players: z.array(duelPlayerTrackSchema),
+}).strict();
+export type DuelWindow = z.infer<typeof duelWindowSchema>;
+
+export const duelsSchema = z.object({
+  meta: z.object({
+    tickrate: positiveInt,
+    /** frames per second of game time captured (= tickrate for full-tick) */
+    sampleRate: positiveInt,
+    coordScale: positiveInt,
+    angleScale: positiveInt,
+    /** anchor window extent before/after the anchor tick, in milliseconds */
+    windowBeforeMs: positiveInt,
+    windowAfterMs: positiveInt,
+  }).strict(),
+  windows: z.array(duelWindowSchema),
+}).strict();
+export type Duels = z.infer<typeof duelsSchema>;
 
 // ── All schemas by manifest file key ─────────────────────────────────────────
 
@@ -491,9 +583,27 @@ export const SCHEMAS_BY_KEY = {
   clutches: clutchesSchema,
   grenades: grenadesSchema,
   shots: shotsSchema,
-  positions1s: positionsSchema,
   replay: replaySchema,
+  duels: duelsSchema,
 } as const;
 
 /** @deprecated Use SCHEMAS_BY_KEY instead. */
 export { SCHEMAS_BY_KEY as FILE_SCHEMAS };
+
+// ── Decode helpers ────────────────────────────────────────────────────────────
+
+/** Decode a delta-encoded integer array back to absolute values. */
+export function decodeDelta(deltas: readonly number[]): number[] {
+  const out = new Array<number>(deltas.length);
+  let acc = 0;
+  for (let i = 0; i < deltas.length; i++) {
+    acc += deltas[i];
+    out[i] = acc;
+  }
+  return out;
+}
+
+/** Replay/duels flags bit values. */
+export const FLAG_ALIVE = 1;
+export const FLAG_HAS_BOMB = 2;
+export const FLAG_HAS_DEFUSE_KIT = 4;

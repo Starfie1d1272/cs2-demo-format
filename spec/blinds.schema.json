@@ -20,41 +20,13 @@
               "null"
             ]
           },
-          "flasherSteamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
+          "flasherIndex": {
+            "type": "integer",
+            "minimum": 0
           },
-          "flashedSteamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "flasherTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "flashedTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "flasherSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
-          },
-          "flashedSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
+          "flashedIndex": {
+            "type": "integer",
+            "minimum": 0
           },
           "durationSeconds": {
             "type": "number",
@@ -66,12 +38,8 @@
           "roundNumber",
           "tick",
           "flashId",
-          "flasherSteamId64",
-          "flashedSteamId64",
-          "flasherTeamKey",
-          "flashedTeamKey",
-          "flasherSide",
-          "flashedSide",
+          "flasherIndex",
+          "flashedIndex",
           "durationSeconds"
         ],
         "additionalProperties": false

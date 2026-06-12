@@ -2,105 +2,131 @@
   "$ref": "#/definitions/shots",
   "definitions": {
     "shots": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "roundNumber": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "tick": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "steamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "teamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "side": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
-          },
-          "weapon": {
-            "type": "string",
-            "minLength": 1
-          },
-          "position": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
+      "type": "object",
+      "properties": {
+        "meta": {
+          "type": "object",
+          "properties": {
+            "coordScale": {
+              "type": "integer",
+              "minimum": 1
             },
-            "required": [
-              "x",
-              "y",
-              "z"
-            ],
-            "additionalProperties": false
+            "angleScale": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
-          "velocity": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y",
-              "z"
-            ],
-            "additionalProperties": false
-          },
-          "yaw": {
-            "type": "number",
-            "minimum": -180,
-            "maximum": 180
-          },
-          "pitch": {
-            "type": "number",
-            "minimum": -90,
-            "maximum": 90
+          "required": [
+            "coordScale",
+            "angleScale"
+          ],
+          "additionalProperties": false
+        },
+        "weaponDict": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         },
-        "required": [
-          "roundNumber",
-          "tick",
-          "steamId64",
-          "teamKey",
-          "side",
-          "weapon",
-          "position",
-          "velocity",
-          "yaw",
-          "pitch"
-        ],
-        "additionalProperties": false
-      }
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "roundNumber": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "playerIndex": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "tick": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "weapon": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -1
+                }
+              },
+              "x": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "y": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "z": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "vx": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "vy": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "vz": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "yaw": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "pitch": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "required": [
+              "roundNumber",
+              "playerIndex",
+              "tick",
+              "weapon",
+              "x",
+              "y",
+              "z",
+              "vx",
+              "vy",
+              "vz",
+              "yaw",
+              "pitch"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "meta",
+        "weaponDict",
+        "tracks"
+      ],
+      "additionalProperties": false
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#"

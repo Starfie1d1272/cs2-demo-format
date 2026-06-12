@@ -1,19 +1,23 @@
 /**
- * Validate fixture directories against the strict schemas and package-level QA.
+ * Validate fixture directories against the strict v3 schemas and package-level QA.
  *
  * Run: pnpm validate:fixtures
+ *
+ * Fixture layout: fixtures/<name>/ holds the extracted package files
+ * (manifest.json + the files it declares). Legacy (< v3) fixtures are skipped.
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "fs";
 import { join } from "path";
-import { SCHEMAS_BY_KEY, manifestSchema } from "../schemas/index.js";
+import { SCHEMAS_BY_KEY, manifestSchema, decodeDelta } from "../schemas/index.js";
 
 const fixturesDir = join(process.cwd(), "fixtures");
 const REQUIRED_KEYS = new Set([
   "match", "players", "rounds", "playerStats", "playerEconomies",
   "kills", "damages", "blinds", "bombs", "grenades", "clutches",
 ]);
-const OPTIONAL_KEYS = new Set(["shots", "positions1s"]);
+const OPTIONAL_KEYS = new Set(["shots", "replay", "duels"]);
+const SCHEMA_VERSION = "cs2-demo-format/3.0";
 const EPS = 0.02;
 
 type Row = Record<string, unknown>;
@@ -35,7 +39,7 @@ for (const demo of fixtureDirs) {
 
   try {
     const manifestRaw = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    if (manifestRaw?.schemaVersion !== "cs2-demo-format/2.0") {
+    if (manifestRaw?.schemaVersion !== SCHEMA_VERSION) {
       console.log(`  - legacy fixture skipped (schemaVersion: ${String(manifestRaw?.schemaVersion ?? "missing")})`);
       skippedLegacy++;
       continue;
@@ -135,13 +139,17 @@ function runPackageQa(data: Record<string, unknown>): number {
   const bombs = asRows(data.bombs);
   const grenades = asRows(data.grenades);
   const clutches = asRows(data.clutches);
+  const replay = isRecord(data.replay) ? data.replay : undefined;
+  const duels = isRecord(data.duels) ? data.duels : undefined;
+  const shots = isRecord(data.shots) ? data.shots : undefined;
 
   console.log(`  • QA rows: players=${players.length}, rounds=${rounds.length}, kills=${kills.length}, damages=${damages.length}`);
 
-  const playerIds = new Set(players.map((p) => p.steamId64).filter((v): v is string => typeof v === "string"));
-  const teamByPlayer = new Map(players.map((p) => [p.steamId64, p.teamKey]));
+  const nPlayers = players.length;
+  const teamByIndex = players.map((p) => p.teamKey);
   const roundNumbers = rounds.map((r) => r.roundNumber).filter((v): v is number => typeof v === "number");
   const roundSet = new Set(roundNumbers);
+  const roundsByNumber = new Map(rounds.map((r) => [r.roundNumber, r]));
 
   const expectedRounds = Array.from({ length: Math.max(0, ...roundNumbers) }, (_, i) => i + 1);
   if (roundNumbers.length && JSON.stringify([...roundNumbers].sort((a, b) => a - b)) !== JSON.stringify(expectedRounds)) {
@@ -175,43 +183,36 @@ function runPackageQa(data: Record<string, unknown>): number {
     }
   }
 
-  const expectedEconomies = rounds.length * players.length;
-  const economyKeys = new Set(economies.map((r) => `${String(r.roundNumber)}:${String(r.steamId64)}`));
+  const expectedEconomies = rounds.length * nPlayers;
+  const economyKeys = new Set(economies.map((r) => `${String(r.roundNumber)}:${String(r.playerIndex)}`));
   if (economyKeys.size !== expectedEconomies) {
     qaErrors += qaError(`player-economies.json: expected ${expectedEconomies} round/player rows, got ${economyKeys.size}`);
   }
 
+  // playerIndex references in range
+  const indexOk = (v: unknown): boolean => typeof v === "number" && Number.isInteger(v) && v >= 0 && v < nPlayers;
   for (const [name, rows, fields] of [
-    ["kills", kills, ["killerSteamId64", "victimSteamId64", "assisterSteamId64", "flashAssisterSteamId64"]],
-    ["damages", damages, ["attackerSteamId64", "victimSteamId64"]],
-    ["blinds", blinds, ["flasherSteamId64", "flashedSteamId64"]],
-    ["bombs", bombs, ["actorSteamId64"]],
-    ["grenades", grenades, ["throwerSteamId64"]],
-    ["clutches", clutches, ["clutcherSteamId64"]],
-    ["playerStats", stats, ["steamId64"]],
+    ["kills", kills, ["killerIndex", "victimIndex", "assisterIndex", "flashAssisterIndex"]],
+    ["damages", damages, ["attackerIndex", "victimIndex"]],
+    ["blinds", blinds, ["flasherIndex", "flashedIndex"]],
+    ["bombs", bombs, ["actorIndex"]],
+    ["grenades", grenades, ["throwerIndex"]],
+    ["clutches", clutches, ["clutcherIndex"]],
+    ["playerEconomies", economies, ["playerIndex"]],
+    ["playerStats", stats, ["playerIndex"]],
   ] as Array<[string, Row[], string[]]>) {
     for (const row of rows) {
       for (const field of fields) {
         const value = row[field];
-        if (value !== null && value !== undefined && !playerIds.has(String(value))) {
-          qaErrors += qaError(`${name}.json: ${field} ${String(value)} is not present in players.json`);
+        if (value !== null && value !== undefined && !indexOk(value)) {
+          qaErrors += qaError(`${name}.json: ${field} ${String(value)} is not a valid players.json index`);
         }
       }
     }
   }
 
-  for (const row of [...kills, ...damages]) {
-    for (const [idField, teamField] of [["killerSteamId64", "killerTeamKey"], ["victimSteamId64", "victimTeamKey"], ["attackerSteamId64", "attackerTeamKey"]]) {
-      const id = row[idField];
-      const team = row[teamField];
-      if (typeof id === "string" && typeof team === "string" && teamByPlayer.get(id) !== team) {
-        qaErrors += qaError(`${teamField} does not match players.teamKey for ${id}`);
-      }
-    }
-  }
-
-  const damageByPlayer = new Map<string, number>();
-  const utilityByPlayer = new Map<string, number>();
+  const damageByPlayer = new Map<number, number>();
+  const utilityByPlayer = new Map<number, number>();
   const utilityWeapons = new Set(["hegrenade", "inferno", "molotov", "incendiary"]);
   for (const row of damages) {
     const raw = Number(row.healthDamageRaw);
@@ -220,34 +221,118 @@ function runPackageQa(data: Record<string, unknown>): number {
     if (Number.isFinite(raw) && Number.isFinite(effective) && Number.isFinite(before) && effective !== Math.min(raw, before)) {
       qaErrors += qaError(`damages.json round ${String(row.roundNumber)} tick ${String(row.tick)}: healthDamage must equal min(healthDamageRaw, victimHealthBefore)`);
     }
-    if (typeof row.attackerSteamId64 === "string" && row.attackerTeamKey !== row.victimTeamKey && Number.isFinite(effective)) {
-      damageByPlayer.set(row.attackerSteamId64, (damageByPlayer.get(row.attackerSteamId64) ?? 0) + effective);
+    const atk = row.attackerIndex;
+    const vic = row.victimIndex;
+    if (typeof atk === "number" && typeof vic === "number" && atk !== vic
+        && teamByIndex[atk] !== teamByIndex[vic] && Number.isFinite(effective)) {
+      damageByPlayer.set(atk, (damageByPlayer.get(atk) ?? 0) + effective);
       if (utilityWeapons.has(String(row.weapon))) {
-        utilityByPlayer.set(row.attackerSteamId64, (utilityByPlayer.get(row.attackerSteamId64) ?? 0) + effective);
+        utilityByPlayer.set(atk, (utilityByPlayer.get(atk) ?? 0) + effective);
       }
     }
   }
 
   for (const row of stats) {
-    const sid = String(row.steamId64);
+    const idx = Number(row.playerIndex);
+    const label = `player-stats.json playerIndex=${idx}`;
     if (row.rounds !== rounds.length) {
-      qaErrors += qaError(`player-stats.json ${sid}: rounds must equal rounds.length (${rounds.length})`);
+      qaErrors += qaError(`${label}: rounds must equal rounds.length (${rounds.length})`);
     }
-    qaErrors += expectEqual(`player-stats.json ${sid}: damageHealth`, row.damageHealth, damageByPlayer.get(sid) ?? 0);
-    qaErrors += expectEqual(`player-stats.json ${sid}: utilityDamage`, row.utilityDamage, utilityByPlayer.get(sid) ?? 0);
+    qaErrors += expectEqual(`${label}: damageHealth`, row.damageHealth, damageByPlayer.get(idx) ?? 0);
+    qaErrors += expectEqual(`${label}: utilityDamage`, row.utilityDamage, utilityByPlayer.get(idx) ?? 0);
     if (typeof row.rounds === "number" && row.rounds > 0) {
-      qaErrors += expectClose(`player-stats.json ${sid}: adr`, row.adr, Number(row.damageHealth) / row.rounds);
-      qaErrors += expectClose(`player-stats.json ${sid}: averageUtilityDamagePerRound`, row.averageUtilityDamagePerRound, Number(row.utilityDamage) / row.rounds);
-      qaErrors += expectClose(`player-stats.json ${sid}: kast`, row.kast, Number(row.kast_rounds) / row.rounds * 100);
+      qaErrors += expectClose(`${label}: adr`, row.adr, Number(row.damageHealth) / row.rounds);
+      qaErrors += expectClose(`${label}: averageUtilityDamagePerRound`, row.averageUtilityDamagePerRound, Number(row.utilityDamage) / row.rounds);
+      qaErrors += expectClose(`${label}: kast`, row.kast, Number(row.kastRounds) / row.rounds * 100);
     }
   }
 
   for (const row of kills) {
-    if (row.flashAssist === true && !row.flashAssisterSteamId64) {
-      qaErrors += qaError(`kills.json round ${String(row.roundNumber)} tick ${String(row.tick)}: flashAssist=true requires flashAssisterSteamId64`);
+    if (row.flashAssist === true && (row.flashAssisterIndex === null || row.flashAssisterIndex === undefined)) {
+      qaErrors += qaError(`kills.json round ${String(row.roundNumber)} tick ${String(row.tick)}: flashAssist=true requires flashAssisterIndex`);
     }
   }
 
+  // ── columnar stream QA ──────────────────────────────────────────────────
+  if (shots) qaErrors += qaShots(shots, nPlayers, roundSet, roundsByNumber);
+  if (replay) qaErrors += qaStream("replay.json", asRows(replay.rounds), nPlayers, roundSet, roundsByNumber,
+    ["x", "y", "z", "yaw", "pitch", "hp", "armor", "money", "equipValue", "weapon", "place", "flash", "flags"]);
+  if (duels) qaErrors += qaStream("duels.json", asRows(duels.windows), nPlayers, roundSet, roundsByNumber,
+    ["x", "y", "z", "yaw", "pitch", "hp", "flash"]);
+
+  return qaErrors;
+}
+
+function qaShots(shots: Row, nPlayers: number, roundSet: Set<number>, roundsByNumber: Map<unknown, Row>): number {
+  let qaErrors = 0;
+  const weaponDict = Array.isArray(shots.weaponDict) ? shots.weaponDict : [];
+  for (const [ti, track] of asRows(shots.tracks).entries()) {
+    const label = `shots.json tracks[${ti}]`;
+    if (!roundSet.has(Number(track.roundNumber))) {
+      qaErrors += qaError(`${label}: roundNumber not in rounds.json`);
+      continue;
+    }
+    const idx = track.playerIndex;
+    if (!(typeof idx === "number" && idx >= 0 && idx < nPlayers)) {
+      qaErrors += qaError(`${label}: playerIndex out of range`);
+    }
+    const cols = ["tick", "weapon", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch"];
+    const lengths = new Set(cols.map((c) => (Array.isArray(track[c]) ? (track[c] as unknown[]).length : -1)));
+    if (lengths.size > 1) {
+      qaErrors += qaError(`${label}: column lengths differ`);
+      continue;
+    }
+    for (const w of (track.weapon as number[] | undefined) ?? []) {
+      if (!(w >= 0 && w < weaponDict.length)) {
+        qaErrors += qaError(`${label}: weapon index ${w} out of weaponDict range`);
+        break;
+      }
+    }
+    const round = roundsByNumber.get(track.roundNumber);
+    if (round && Array.isArray(track.tick)) {
+      const ticks = decodeDelta(track.tick as number[]);
+      if (ticks.some((t) => t < Number(round.freezeEndTick) || t > Number(round.endTick))) {
+        qaErrors += qaError(`${label}: decoded ticks fall outside the round window`);
+      }
+    }
+  }
+  return qaErrors;
+}
+
+function qaStream(name: string, blocks: Row[], nPlayers: number, roundSet: Set<number>,
+                  roundsByNumber: Map<unknown, Row>, cols: string[]): number {
+  let qaErrors = 0;
+  for (const block of blocks) {
+    const rn = block.roundNumber;
+    const label = `${name} round ${String(rn)}`;
+    if (!roundSet.has(Number(rn))) {
+      qaErrors += qaError(`${label}: roundNumber not in rounds.json`);
+      continue;
+    }
+    const fc = Number(block.frameCount);
+    const round = roundsByNumber.get(rn);
+    const start = Number(block.startTick);
+    const step = Number(block.tickStep);
+    if (round && fc > 0) {
+      const last = start + (fc - 1) * step;
+      if (start < Number(round.freezeEndTick) || last > Number(round.endTick)) {
+        qaErrors += qaError(`${label}: frame grid [${start}, ${last}] outside round window`);
+      }
+    }
+    for (const [pi, track] of asRows(block.players).entries()) {
+      const idx = track.playerIndex;
+      if (!(typeof idx === "number" && idx >= 0 && idx < nPlayers)) {
+        qaErrors += qaError(`${label} players[${pi}]: playerIndex out of range`);
+      }
+      for (const c of cols) {
+        const arr = track[c];
+        if (!Array.isArray(arr) || arr.length !== fc) {
+          qaErrors += qaError(`${label} players[${pi}]: column "${c}" length != frameCount ${fc}`);
+          break;
+        }
+      }
+    }
+  }
   return qaErrors;
 }
 
