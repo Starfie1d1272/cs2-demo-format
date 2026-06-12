@@ -74,6 +74,17 @@ def _num(series, fill=0.0):
     return pd.to_numeric(series, errors="coerce").fillna(fill)
 
 
+def _slice_by_tick(df, tick_values, start: int, end: int):
+    """Return rows with start <= tick <= end from a tick-sorted DataFrame."""
+    import numpy as np
+
+    left = int(np.searchsorted(tick_values, start, side="left"))
+    right = int(np.searchsorted(tick_values, end, side="right"))
+    if right <= left:
+        return df.iloc[0:0]
+    return df.iloc[left:right]
+
+
 # ── bomb carrier timeline (replaces per-frame inventory parsing) ──────────────
 
 def build_bomb_carrier_timeline(raw: dict, players: PlayerDirectory):
@@ -144,6 +155,7 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
     df["_plidx"] = df["last_place_name"].map(place_map).fillna(-1).astype("int64")
 
     bomb_ticks, bomb_carrier = build_bomb_carrier_timeline(raw, players)
+    tick_values = df["tick"].to_numpy()
 
     # projectile trajectories per round
     proj_by_round: dict[int, list[dict]] = {}
@@ -166,7 +178,7 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
         grid = np.arange(w.freeze_end_tick, w.end_tick, step, dtype="int64")
         if len(grid) == 0:
             continue
-        sl = df[(df["tick"] >= grid[0]) & (df["tick"] <= grid[-1])]
+        sl = _slice_by_tick(df, tick_values, int(grid[0]), int(grid[-1]))
         if len(sl) == 0:
             continue
         player_tracks = []
@@ -284,6 +296,7 @@ def build_duels(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
                             "attackerIndex": d["attackerIndex"],
                             "victimIndex": d["victimIndex"]})
     anchors_all.sort(key=lambda a: a["tick"])
+    tick_values = df["tick"].to_numpy()
 
     out_windows: list[dict] = []
     for start, end in windows:
@@ -291,7 +304,7 @@ def build_duels(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
         if rn is None:
             continue
         grid = np.arange(start, end + 1, dtype="int64")
-        sl = df[(df["tick"] >= start) & (df["tick"] <= end)]
+        sl = _slice_by_tick(df, tick_values, int(start), int(end))
         if len(sl) == 0:
             continue
         anchors = [a for a in anchors_all if start <= a["tick"] <= end]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import math
+import time
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,7 @@ _FILENAMES = {
 
 def export_demo(dem_path: str, *, research: bool = False, sample_rate: int = 8,
                 window_before_ms: int = 2000, window_after_ms: int = 1000,
+                compress_level: int = 3,
                 progress: ProgressFn | None = None) -> tuple[bytes, dict]:
     """Parse `dem_path` and return (v3 ZIP bytes, match_meta dict)."""
     from .parse import parse_demo
@@ -59,39 +61,51 @@ def export_demo(dem_path: str, *, research: bool = False, sample_rate: int = 8,
         progress("build package", 0.92)
     return build_package(raw, dem_path, demo_hash,
                          window_before_ms=window_before_ms,
-                         window_after_ms=window_after_ms)
+                         window_after_ms=window_after_ms,
+                         compress_level=compress_level)
 
 
 def build_package(raw: dict[str, Any], dem_path: str, demo_hash: str | None, *,
-                  window_before_ms: int = 2000, window_after_ms: int = 1000) -> tuple[bytes, dict]:
+                  window_before_ms: int = 2000, window_after_ms: int = 1000,
+                  compress_level: int = 3) -> tuple[bytes, dict]:
     """Pure assembly: raw parse output → (v3 ZIP bytes, match_meta)."""
+    timings = dict(raw.get("_timings") or {})
     tickrate = int(raw.get("tickrate") or 64)
     sample_rate = int(raw.get("sample_rate") or 8)
 
-    players = build_players(raw)
+    players = _timed(timings, "package.players", lambda: build_players(raw))
     team_map = {p["steamId64"]: p["teamKey"] for p in players.rows}
-    rounds, round_model = build_rounds(raw, team_map)
+    rounds, round_model = _timed(timings, "package.rounds", lambda: build_rounds(raw, team_map))
 
-    kills = build_kills(raw, players, round_model)
-    grenades = build_grenades(raw, players, round_model)
-    flash_lookup = {
-        (g["roundNumber"], g["effectTick"]): g["grenadeId"]
-        for g in grenades if g["grenade"] == "flashbang" and g["grenadeId"]
-    }
-    blinds = build_blinds(raw, players, round_model, flash_lookup=flash_lookup)
-    damages = build_damages(raw, players, round_model)
-    clutches = build_clutches(kills, rounds, players)
-    economies = build_economies(raw, players, round_model, rounds)  # mutates rounds economy
-    player_stats = build_player_stats(raw, players, round_model, rounds,
-                                      kills_list=kills, blinds_list=blinds,
-                                      damages_list=damages, clutches_list=clutches)
-    bombs = build_bombs(raw, players, round_model)
-    match_json = build_match(raw, rounds)
+    def build_events():
+        kills_out = build_kills(raw, players, round_model)
+        grenades_out = build_grenades(raw, players, round_model)
+        flash_lookup = {
+            (g["roundNumber"], g["effectTick"]): g["grenadeId"]
+            for g in grenades_out if g["grenade"] == "flashbang" and g["grenadeId"]
+        }
+        blinds_out = build_blinds(raw, players, round_model, flash_lookup=flash_lookup)
+        damages_out = build_damages(raw, players, round_model)
+        clutches_out = build_clutches(kills_out, rounds, players)
+        economies_out = build_economies(raw, players, round_model, rounds)  # mutates rounds economy
+        player_stats_out = build_player_stats(
+            raw, players, round_model, rounds,
+            kills_list=kills_out, blinds_list=blinds_out,
+            damages_list=damages_out, clutches_list=clutches_out,
+        )
+        bombs_out = build_bombs(raw, players, round_model)
+        match_out = build_match(raw, rounds)
+        return (kills_out, grenades_out, blinds_out, damages_out, clutches_out,
+                economies_out, player_stats_out, bombs_out, match_out)
 
-    shots = build_shots(raw, players, round_model)
-    replay = build_replay(raw, players, round_model, tickrate, sample_rate)
-    duels = build_duels(raw, players, round_model, tickrate, kills, damages,
-                        window_before_ms, window_after_ms)
+    (kills, grenades, blinds, damages, clutches,
+     economies, player_stats, bombs, match_json) = _timed(timings, "package.events", build_events)
+
+    shots = _timed(timings, "package.shots", lambda: build_shots(raw, players, round_model))
+    replay = _timed(timings, "package.replay", lambda: build_replay(raw, players, round_model,
+                                                                    tickrate, sample_rate))
+    duels = _timed(timings, "package.duels", lambda: build_duels(
+        raw, players, round_model, tickrate, kills, damages, window_before_ms, window_after_ms))
 
     data_by_key: dict[str, Any] = {
         "match": match_json,
@@ -129,16 +143,29 @@ def build_package(raw: dict[str, Any], dem_path: str, demo_hash: str | None, *,
         "teamA": match_json.get("teamA") or {},
         "teamB": match_json.get("teamB") or {},
     }
-    return _write_zip(manifest, data_by_key), match_meta
+    zip_bytes = _timed(timings, "package.writeZip",
+                       lambda: _write_zip(manifest, data_by_key, compress_level=compress_level))
+    match_meta["timingsSeconds"] = timings
+    match_meta["compressLevel"] = compress_level
+    return zip_bytes, match_meta
 
 
-def _write_zip(manifest: dict, data_by_key: dict[str, Any]) -> bytes:
+def _write_zip(manifest: dict, data_by_key: dict[str, Any], *,
+               compress_level: int = 3) -> bytes:
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=compress_level) as zf:
         zf.writestr("manifest.json", _dumps(manifest))
         for key, data in data_by_key.items():
             zf.writestr(_FILENAMES[key], _dumps(data))
     return buf.getvalue()
+
+
+def _timed(timings: dict[str, float], name: str, fn):
+    started = time.perf_counter()
+    result = fn()
+    timings[name] = round(time.perf_counter() - started, 3)
+    return result
 
 
 def _dumps(data: Any) -> bytes:

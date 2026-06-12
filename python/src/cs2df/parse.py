@@ -23,6 +23,7 @@ Provenance: event extraction layout ported from cs2-demo-analysis-kit
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
@@ -70,6 +71,11 @@ def _rows(result: Any) -> list[dict]:
     if hasattr(result, "to_dict"):
         return result.to_dict(orient="records")
     return list(result)
+
+
+def _raise_if_control_flow(exc: BaseException) -> None:
+    if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+        raise exc
 
 
 def _safe_event(parser: DemoParser, event: str,
@@ -129,72 +135,98 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     """Full extraction. Event tables are lists of dicts; per-frame data is DataFrames."""
     from demoparser2 import DemoParser  # lazy: native dep
 
+    timings: dict[str, float] = {}
+    parse_started = time.perf_counter()
+
+    def _record(stage: str, started: float) -> None:
+        timings[stage] = round(time.perf_counter() - started, 3)
+
     def _p(stage: str, frac: float) -> None:
         if progress is not None:
             progress(stage, frac)
 
     _p("open demo", 0.01)
+    stage_started = time.perf_counter()
     p = DemoParser(dem_path)
+    _record("parse.openDemo", stage_started)
 
+    stage_started = time.perf_counter()
     try:
         header = dict(p.parse_header())
-    except BaseException:
+    except BaseException as exc:
+        _raise_if_control_flow(exc)
         header = {}
+    _record("parse.header", stage_started)
     try:
         tickrate = int(float(header.get("tick_rate") or 64))
     except (TypeError, ValueError):
         tickrate = 64
 
     _p("round events", 0.05)
+    stage_started = time.perf_counter()
     g_round = _safe_events(p,
         ["round_start", "round_freeze_end", "round_end", "player_blind",
          "round_announce_match_start"],
         other=["winner", "reason", "legacy", "blind_duration", "total_rounds_played"],
     )
+    _record("parse.roundEvents", stage_started)
 
     _p("kills", 0.12)
+    stage_started = time.perf_counter()
     deaths = _safe_event(p, "player_death",
         other=["headshot", "noscope", "thrusmoke", "penetrated", "penetrated_objects",
                "assistedflash", "attackerblind", "total_rounds_played"],
         player=["X", "Y", "Z", "active_weapon"],
     )
+    _record("parse.kills", stage_started)
 
     _p("damages", 0.2)
+    stage_started = time.perf_counter()
     hurts = _safe_event(p, "player_hurt",
         other=["weapon", "hitgroup", "dmg_health", "dmg_armor", "health", "armor",
                "total_rounds_played"],
         player=["X", "Y", "Z"],
     )
+    _record("parse.damages", stage_started)
 
     _p("shots", 0.28)
+    stage_started = time.perf_counter()
     fires = _safe_event(p, "weapon_fire",
         other=["weapon", "total_rounds_played"],
         player=["X", "Y", "Z", "yaw", "pitch"],
     )
+    _record("parse.shotsEvents", stage_started)
     # velocity is not available via weapon_fire player extras; fetch from tick data.
+    stage_started = time.perf_counter()
     fire_velocity_df = None
     if fires:
         shot_ticks = sorted({int(r["tick"]) for r in fires if int(r.get("tick") or 0) > 0})
         if shot_ticks:
             fire_velocity_df = _safe_ticks_df(
                 p, ["steamid", "velocity_X", "velocity_Y", "velocity_Z"], shot_ticks)
+    _record("parse.shotsVelocity", stage_started)
 
     _p("bomb events", 0.36)
+    stage_started = time.perf_counter()
     g_bomb = _safe_events(p,
         ["bomb_planted", "bomb_defused", "bomb_exploded",
          "bomb_beginplant", "bomb_begindefuse", "bomb_dropped", "bomb_pickup"],
         other=["site", "total_rounds_played"],
         player=["steamid", "X", "Y", "Z", "last_place_name"])
+    _record("parse.bombEvents", stage_started)
 
     _p("grenade detonations", 0.42)
+    stage_started = time.perf_counter()
     g_nade = _safe_events(p,
         [name for name, _ in _GRENADE_EVENTS] + ["inferno_expire", "smokegrenade_expired"],
         other=["total_rounds_played"], player=_GRENADE_PLAYER_FIELDS)
     grenade_detonations: list[dict] = []
     for ev_name, gtype in _GRENADE_EVENTS:
         grenade_detonations.extend({**r, "_grenade_type": gtype} for r in g_nade[ev_name])
+    _record("parse.grenadeEvents", stage_started)
 
     # ── player info / team names at match start ──────────────────
+    stage_started = time.perf_counter()
     announce_rows = g_round["round_announce_match_start"]
     round_freeze_ends = g_round["round_freeze_end"]
     if announce_rows:
@@ -218,13 +250,15 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
                 team_a_name = name
             elif tn == 3:
                 team_b_name = name
-    except BaseException:
+    except BaseException as exc:
+        _raise_if_control_flow(exc)
         pass
 
     try:
         player_info = _rows(p.parse_ticks(
             ["name", "steamid", "team_num", "team_name"], ticks=[match_start_tick]))
-    except BaseException:
+    except BaseException as exc:
+        _raise_if_control_flow(exc)
         player_info = []
 
     # Side ground truth sampled shortly after each freeze ends.
@@ -236,20 +270,27 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
         try:
             round_side_samples = _rows(p.parse_ticks(["steamid", "team_num"],
                                                      ticks=round_side_ticks))
-        except BaseException:
+        except BaseException as exc:
+            _raise_if_control_flow(exc)
             round_side_samples = []
+    _record("parse.playerInfo", stage_started)
 
     # ── replay grid (single DataFrame, no row dicts) ─────────────
     _p("replay grid (slowest stage)", 0.5)
+    stage_started = time.perf_counter()
     round_ends = g_round["round_end"]
     step = max(1, tickrate // max(1, sample_rate))
     replay_ticks = _build_sample_ticks(round_ends, round_freeze_ends, step)
     replay_df = _safe_ticks_df(p, _REPLAY_PROPS, replay_ticks) if replay_ticks else None
+    _record("parse.replayGrid", stage_started)
 
     _p("grenade trajectories", 0.72)
+    stage_started = time.perf_counter()
     grenade_throws, grenade_trajectories = _extract_grenade_paths(p, replay_ticks)
+    _record("parse.grenadeTrajectories", stage_started)
 
     # ── duel windows (research profile): full-tick lean parse ────
+    stage_started = time.perf_counter()
     duel_df = None
     duel_windows: list[tuple[int, int]] = []
     if research:
@@ -262,8 +303,10 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
             duel_ticks.extend(range(start, end + 1))
         if duel_ticks:
             duel_df = _safe_ticks_df(p, _DUEL_PROPS, duel_ticks)
+    _record("parse.duelWindows", stage_started)
 
     _p("economy", 0.92)
+    stage_started = time.perf_counter()
     freeze_ticks = sorted({int(r["tick"]) for r in round_freeze_ends if r.get("tick")})
     economy_raw: list[dict] = []
     if freeze_ticks:
@@ -272,10 +315,14 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
                 ["steamid", "team_num", "cash_spent_this_round", "current_equip_value",
                  "start_balance", "armor", "has_helmet", "has_defuser", "inventory"],
                 ticks=freeze_ticks))
-        except BaseException:
+        except BaseException as exc:
+            _raise_if_control_flow(exc)
             economy_raw = []
+    _record("parse.economy", stage_started)
+    timings["parse.total"] = round(time.perf_counter() - parse_started, 3)
 
     return {
+        "_timings": timings,
         "header": header,
         "tickrate": tickrate,
         "sample_rate": max(1, tickrate // step),

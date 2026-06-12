@@ -1,14 +1,15 @@
 """cs2df CLI — reference exporter & validator for cs2-demo-format v3.
 
 Commands:
-    cs2df export <demo.dem> [-o out.zip] [--research] [--sample-rate 8]
-    cs2df export-batch <dir> [--research] [--sample-rate 8] [--workers N] [--fail-fast] [--descriptive]
+    cs2df export <demo.dem> [-o out.zip] [--research] [--sample-rate 8] [--compress-level 3]
+    cs2df export-batch <dir> [--research] [--sample-rate 8] [--workers N] [--fail-fast] [--descriptive] [--compress-level 3]
     cs2df validate <export.zip> [--spec DIR] [--strict]
 """
 
 from __future__ import annotations
 
 import argparse
+import builtins
 import json
 import os
 import sys
@@ -16,6 +17,8 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
+
+DEFAULT_COMPRESS_LEVEL = 3
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,6 +38,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="duel window extent before each anchor, ms (default 2000)")
     p_exp.add_argument("--window-after", type=int, default=1000,
                        help="duel window extent after each anchor, ms (default 1000)")
+    p_exp.add_argument("--compress-level", type=int, default=DEFAULT_COMPRESS_LEVEL,
+                       help="ZIP DEFLATE compression level 0-9 (default 3)")
     p_exp.add_argument("-q", "--quiet", action="store_true", help="suppress progress output")
 
     p_batch = sub.add_parser("export-batch", help="batch-export all .dem files in a directory")
@@ -47,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
                          help="duel window extent before each anchor, ms (default 2000)")
     p_batch.add_argument("--window-after", type=int, default=1000,
                          help="duel window extent after each anchor, ms (default 1000)")
+    p_batch.add_argument("--compress-level", type=int, default=DEFAULT_COMPRESS_LEVEL,
+                         help="ZIP DEFLATE compression level 0-9 (default 3)")
     p_batch.add_argument("--workers", type=int, default=None,
                          help="parallel worker count (default: logical CPU count)")
     p_batch.add_argument("--fail-fast", action="store_true",
@@ -77,6 +84,9 @@ def _cmd_export(args) -> int:
     if not dem.exists():
         print(f"ERROR: demo not found: {dem}", file=sys.stderr)
         return 1
+    if not _compress_level_ok(args.compress_level):
+        print("ERROR: --compress-level must be between 0 and 9", file=sys.stderr)
+        return 1
     out = Path(args.output) if args.output else dem.with_suffix(".zip")
 
     t0 = time.perf_counter()
@@ -89,6 +99,7 @@ def _cmd_export(args) -> int:
                                      sample_rate=args.sample_rate,
                                      window_before_ms=args.window_before,
                                      window_after_ms=args.window_after,
+                                     compress_level=args.compress_level,
                                      progress=progress)
     out.write_bytes(data)
     dt = time.perf_counter() - t0
@@ -106,6 +117,9 @@ def _cmd_export_batch(args) -> int:
     if not demos:
         print(f"ERROR: no .dem files found in {directory}", file=sys.stderr)
         return 1
+    if not _compress_level_ok(args.compress_level):
+        print("ERROR: --compress-level must be between 0 and 9", file=sys.stderr)
+        return 1
 
     workers = args.workers if args.workers is not None else _default_workers()
     if workers < 1:
@@ -118,19 +132,24 @@ def _cmd_export_batch(args) -> int:
         "sample_rate": args.sample_rate,
         "window_before_ms": args.window_before,
         "window_after_ms": args.window_after,
+        "compress_level": args.compress_level,
     }
 
     report: list[dict] = []
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(_export_one_report, str(dem), str(directory),
-                        export_kwargs, args.descriptive): dem
-            for dem in demos
-        }
+        futures = {}
+        for dem in demos:
+            submitted = time.perf_counter()
+            future = pool.submit(_export_one_report, str(dem), str(directory),
+                                 export_kwargs, args.descriptive)
+            futures[future] = (dem, submitted)
         for future in as_completed(futures):
-            dem = futures[future]
-            row = future.result()
+            dem, submitted = futures[future]
+            try:
+                row = future.result()
+            except BaseException as exc:
+                row = _failed_batch_row(dem, submitted, _format_exception(exc))
             report.append(row)
             if row["ok"]:
                 print(f"  ok  {dem.name} -> {Path(row['zip']).name}  "
@@ -190,34 +209,34 @@ def _export_one_report(dem_path: str, out_dir: str, export_kwargs: dict,
     started = time.perf_counter()
     try:
         data, match_meta = export_demo(str(dem), progress=None, **export_kwargs)
+        timings = dict(match_meta.get("timingsSeconds") or {})
         if descriptive:
             date_str = _file_date_str(dem)
             name = _build_descriptive_from_meta(match_meta, dem.stem, date_str)
+            write_started = time.perf_counter()
+            zip_path = _write_unique_zip(Path(out_dir), name, dem.stem, data)
         else:
             name = f"{dem.stem}.zip"
-        zip_path = Path(out_dir) / name
-        zip_path.write_bytes(data)
+            zip_path = Path(out_dir) / name
+            write_started = time.perf_counter()
+            zip_path.write_bytes(data)
+        timings["batch.writeFile"] = round(time.perf_counter() - write_started, 3)
         duration = time.perf_counter() - started
         return {
             "demo": str(dem),
-            "zip": name,
+            "zip": zip_path.name,
             "ok": True,
             "error": None,
             "durationSeconds": round(duration, 3),
             "demoBytes": dem.stat().st_size,
             "zipBytes": len(data),
+            "compressLevel": match_meta.get("compressLevel"),
+            "timingsSeconds": timings,
         }
-    except Exception as exc:
-        duration = time.perf_counter() - started
-        return {
-            "demo": str(dem),
-            "zip": None,
-            "ok": False,
-            "error": str(exc),
-            "durationSeconds": round(duration, 3),
-            "demoBytes": dem.stat().st_size if dem.exists() else 0,
-            "zipBytes": 0,
-        }
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException as exc:
+        return _failed_batch_row(dem, started, _format_exception(exc))
 
 
 def _file_date_str(dem: Path) -> str:
@@ -253,10 +272,70 @@ def _sanitize(s: str) -> str:
     return s.strip('_')
 
 
+def _write_unique_zip(out_dir: Path, preferred_name: str, stem: str, data: bytes) -> Path:
+    """Write bytes without overwriting an existing batch output."""
+    preferred = Path(preferred_name)
+    suffix = preferred.suffix or ".zip"
+    base = preferred.stem or _sanitize(stem) or "export"
+    fallback = _sanitize(stem) or "export"
+    candidates = [f"{base}{suffix}", f"{base}_{fallback}{suffix}"]
+    for i in range(2, 1000):
+        candidates.append(f"{base}_{fallback}_{i}{suffix}")
+
+    for name in candidates:
+        path = out_dir / name
+        try:
+            with builtins.open(path, "xb") as f:
+                f.write(data)
+            return path
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"could not allocate unique output name for {preferred_name}")
+
+
+def _failed_batch_row(dem: Path, started: float, error: str) -> dict:
+    duration = time.perf_counter() - started
+    return {
+        "demo": str(dem),
+        "zip": None,
+        "ok": False,
+        "error": error,
+        "durationSeconds": round(duration, 3),
+        "demoBytes": dem.stat().st_size if dem.exists() else 0,
+        "zipBytes": 0,
+        "compressLevel": None,
+        "timingsSeconds": None,
+    }
+
+
+def _format_exception(exc: BaseException) -> str:
+    text = str(exc)
+    if text:
+        return f"{type(exc).__name__}: {text}"
+    return type(exc).__name__
+
+
 def _mb_per_s(total_bytes: int, duration_seconds: float) -> float:
     if not duration_seconds:
         return 0.0
     return round((total_bytes / 1_000_000) / duration_seconds, 3)
+
+
+def _compress_level_ok(value: int) -> bool:
+    return 0 <= value <= 9
+
+
+def _aggregate_timings(report: list[dict]) -> dict:
+    rows = [r.get("timingsSeconds") for r in report if r.get("ok") and r.get("timingsSeconds")]
+    if not rows:
+        return {"count": 0, "total": {}, "average": {}}
+    keys = sorted({key for row in rows for key in row})
+    totals = {
+        key: round(sum(float(row.get(key) or 0.0) for row in rows), 3)
+        for key in keys
+    }
+    averages = {key: round(value / len(rows), 3) for key, value in totals.items()}
+    return {"count": len(rows), "total": totals, "average": averages}
 
 
 def _write_batch_report(out_dir: Path, report: list[dict],
@@ -278,6 +357,7 @@ def _write_batch_report(out_dir: Path, report: list[dict],
         "demoMegabytesPerSecond": _mb_per_s(demo_bytes, duration_seconds),
         "zipMegabytesPerSecond": _mb_per_s(zip_bytes, duration_seconds),
         "compressionRatio": round(zip_bytes / demo_bytes, 4) if demo_bytes else None,
+        "timingsSeconds": _aggregate_timings(report),
         "items": sorted(report, key=lambda r: r["demo"]),
     }
     report_path = out_dir / "report.json"
