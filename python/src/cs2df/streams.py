@@ -367,24 +367,36 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
     demoparser2; it is fetched from tick data (velocity_X/Y/Z) and joined
     on (tick, playerIndex).
     """
-    import pandas as pd
-
     from .events import _active_event_round_number, _safe_float
 
-    # Build (tick, playerIndex) → (vx, vy, vz) lookup from tick data.
-    vel_lookup: dict[tuple[int, int], tuple[int, int, int]] = {}
-    vel_df = raw.get("fire_velocity_df")
+    # Build playerIndex → {tick: (vx, vy, vz)} lookup from tick data.
+    # _prep_frame_df handles steamid→playerIndex mapping, tick coercion, and NaN removal.
+    vel_by_player: dict[int, dict[int, tuple[int, int, int]]] = {}
+    vel_df = _prep_frame_df(raw.get("fire_velocity_df"), players)
     if vel_df is not None and len(vel_df) > 0:
-        sid_series = pd.to_numeric(vel_df["steamid"], errors="coerce").fillna(0).astype("int64").astype(str)
-        for i, row in vel_df.iterrows():
-            pi = players.index_by_sid.get(sid_series.at[i])
-            if pi is None:
-                continue
-            tick = int(row["tick"])
-            vx = int(round(_safe_float(row.get("velocity_X"), 0.0)))
-            vy = int(round(_safe_float(row.get("velocity_Y"), 0.0)))
-            vz = int(round(_safe_float(row.get("velocity_Z"), 0.0)))
-            vel_lookup[(tick, pi)] = (vx, vy, vz)
+        tick_arr = vel_df["tick"].values
+        pidx_arr = vel_df["_pidx"].values
+        vx_raw = _num(vel_df["velocity_X"])
+        vy_raw = _num(vel_df["velocity_Y"])
+        vz_raw = _num(vel_df["velocity_Z"])
+        vx_arr = vx_raw.values
+        vy_arr = vy_raw.values
+        vz_arr = vz_raw.values
+        for pi_np, tick_np, vx_np, vy_np, vz_np in zip(
+            pidx_arr, tick_arr, vx_arr, vy_arr, vz_arr,
+        ):
+            pi = int(pi_np)
+            tick = int(tick_np)
+            vel = vel_by_player.get(pi)
+            if vel is None:
+                vel = {}
+                vel_by_player[pi] = vel
+            # Last write wins if duplicate (tick, playerIndex) rows exist.
+            vel[tick] = (
+                int(round(float(vx_np))),
+                int(round(float(vy_np))),
+                int(round(float(vz_np))),
+            )
 
     groups: dict[tuple[int, int], list[dict]] = {}
     for r in raw.get("fires", []):
@@ -413,9 +425,10 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
         vx_vals: list[int] = []
         vy_vals: list[int] = []
         vz_vals: list[int] = []
+        player_vel = vel_by_player.get(idx, {})
         for r in rows:
             tick = int(r.get("tick") or 0)
-            vx, vy, vz = vel_lookup.get((tick, idx), (0, 0, 0))
+            vx, vy, vz = player_vel.get(tick, (0, 0, 0))
             vx_vals.append(vx)
             vy_vals.append(vy)
             vz_vals.append(vz)

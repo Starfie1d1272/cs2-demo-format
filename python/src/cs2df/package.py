@@ -41,8 +41,8 @@ _FILENAMES = {
 
 def export_demo(dem_path: str, *, research: bool = False, sample_rate: int = 8,
                 window_before_ms: int = 2000, window_after_ms: int = 1000,
-                progress: ProgressFn | None = None) -> bytes:
-    """Parse `dem_path` and return the cs2-demo-format v3 ZIP as bytes."""
+                progress: ProgressFn | None = None) -> tuple[bytes, dict]:
+    """Parse `dem_path` and return (v3 ZIP bytes, match_meta dict)."""
     from .parse import parse_demo
 
     try:
@@ -63,8 +63,8 @@ def export_demo(dem_path: str, *, research: bool = False, sample_rate: int = 8,
 
 
 def build_package(raw: dict[str, Any], dem_path: str, demo_hash: str | None, *,
-                  window_before_ms: int = 2000, window_after_ms: int = 1000) -> bytes:
-    """Pure assembly: raw parse output → v3 ZIP bytes (testable without demoparser2)."""
+                  window_before_ms: int = 2000, window_after_ms: int = 1000) -> tuple[bytes, dict]:
+    """Pure assembly: raw parse output → (v3 ZIP bytes, match_meta)."""
     tickrate = int(raw.get("tickrate") or 64)
     sample_rate = int(raw.get("sample_rate") or 8)
 
@@ -124,7 +124,12 @@ def build_package(raw: dict[str, Any], dem_path: str, demo_hash: str | None, *,
         "files": {key: _FILENAMES[key] for key in data_by_key},
     }
 
-    return _write_zip(manifest, data_by_key)
+    match_meta = {
+        "mapName": match_json.get("mapName", "unknown"),
+        "teamA": match_json.get("teamA") or {},
+        "teamB": match_json.get("teamB") or {},
+    }
+    return _write_zip(manifest, data_by_key), match_meta
 
 
 def _write_zip(manifest: dict, data_by_key: dict[str, Any]) -> bytes:

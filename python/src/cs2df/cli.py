@@ -9,13 +9,10 @@ Commands:
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import os
 import sys
-import tempfile
 import time
-import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -88,11 +85,11 @@ def _cmd_export(args) -> int:
         def progress(stage: str, frac: float) -> None:
             print(f"  [{frac * 100:5.1f}%] {stage}")
 
-    data = export_demo(str(dem), research=args.research,
-                       sample_rate=args.sample_rate,
-                       window_before_ms=args.window_before,
-                       window_after_ms=args.window_after,
-                       progress=progress)
+    data, _match_meta = export_demo(str(dem), research=args.research,
+                                     sample_rate=args.sample_rate,
+                                     window_before_ms=args.window_before,
+                                     window_after_ms=args.window_after,
+                                     progress=progress)
     out.write_bytes(data)
     dt = time.perf_counter() - t0
     print(f"wrote {out} ({len(data) / 1e6:.2f} MB) in {dt:.1f}s")
@@ -125,39 +122,29 @@ def _cmd_export_batch(args) -> int:
 
     report: list[dict] = []
     t0 = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="cs2df-") as tmp:
-        tmp_dir = Path(tmp)
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(_export_one_report, str(dem), str(tmp_dir),
-                            export_kwargs, args.descriptive): dem
-                for dem in demos
-            }
-            for future in as_completed(futures):
-                dem = futures[future]
-                row = future.result()
-                report.append(row)
-                if row["ok"]:
-                    print(f"  ok  {dem.name} -> {Path(row['zip']).name}  "
-                          f"{row['zipBytes'] / 1e6:.1f}MB  {row['durationSeconds']:.1f}s")
-                else:
-                    print(f"  FAIL {dem.name}: {row['error']}  ({row['durationSeconds']:.1f}s)")
-                    if args.fail_fast:
-                        for pending in futures:
-                            pending.cancel()
-                        dt = time.perf_counter() - t0
-                        _write_batch_report(directory, report, dt)
-                        return 1
-
-        dt = time.perf_counter() - t0
-        # Copy individual ZIPs out of temp dir next to their source demos.
-        for row in report:
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_export_one_report, str(dem), str(directory),
+                        export_kwargs, args.descriptive): dem
+            for dem in demos
+        }
+        for future in as_completed(futures):
+            dem = futures[future]
+            row = future.result()
+            report.append(row)
             if row["ok"]:
-                src = tmp_dir / Path(row["zip"]).name
-                if src.exists():
-                    dest = directory / Path(row["zip"]).name
-                    dest.write_bytes(src.read_bytes())
-        _write_batch_report(directory, report, dt)
+                print(f"  ok  {dem.name} -> {Path(row['zip']).name}  "
+                      f"{row['zipBytes'] / 1e6:.1f}MB  {row['durationSeconds']:.1f}s")
+            else:
+                print(f"  FAIL {dem.name}: {row['error']}  ({row['durationSeconds']:.1f}s)")
+                if args.fail_fast:
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    dt = time.perf_counter() - t0
+                    _write_batch_report(directory, report, dt)
+                    return 1
+
+    dt = time.perf_counter() - t0
+    _write_batch_report(directory, report, dt)
 
     ok = sum(1 for r in report if r["ok"])
     fail = sum(1 for r in report if not r["ok"])
@@ -194,7 +181,7 @@ def _resolve_spec_dir(arg: str | None) -> Path | None:
 
 # ── batch helpers (module-level for picklability with ProcessPoolExecutor) ──────
 
-def _export_one_report(dem_path: str, tmp_dir: str, export_kwargs: dict,
+def _export_one_report(dem_path: str, out_dir: str, export_kwargs: dict,
                        descriptive: bool) -> dict:
     """Parse → build → package one demo; return a structured result row."""
     from .package import export_demo
@@ -202,12 +189,13 @@ def _export_one_report(dem_path: str, tmp_dir: str, export_kwargs: dict,
     dem = Path(dem_path)
     started = time.perf_counter()
     try:
-        data = export_demo(str(dem), progress=None, **export_kwargs)
+        data, match_meta = export_demo(str(dem), progress=None, **export_kwargs)
         if descriptive:
-            name = _build_descriptive_name(data, dem)
+            date_str = _file_date_str(dem)
+            name = _build_descriptive_from_meta(match_meta, dem.stem, date_str)
         else:
             name = f"{dem.stem}.zip"
-        zip_path = Path(tmp_dir) / name
+        zip_path = Path(out_dir) / name
         zip_path.write_bytes(data)
         duration = time.perf_counter() - started
         return {
@@ -232,28 +220,28 @@ def _export_one_report(dem_path: str, tmp_dir: str, export_kwargs: dict,
         }
 
 
-def _build_descriptive_name(zip_bytes: bytes, dem: Path) -> str:
-    """Build a descriptive filename from match metadata; fall back to stem."""
+def _file_date_str(dem: Path) -> str:
+    """Return file modification date as YYYY-MM-DD, or 'unknown' on error."""
     try:
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            manifest = json.loads(zf.read("manifest.json"))
-            match = json.loads(zf.read(manifest["files"]["match"]))
-
         mtime = os.path.getmtime(str(dem))
-        date = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
-        map_name = _sanitize(match.get("mapName", "unknown"))
-        team_a = _sanitize((match.get("teamA") or {}).get("name") or "")
-        team_b = _sanitize((match.get("teamB") or {}).get("name") or "")
-        score_a = (match.get("teamA") or {}).get("score", 0)
-        score_b = (match.get("teamB") or {}).get("score", 0)
+        return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+    except OSError:
+        return "unknown"
 
-        if team_a and team_b:
-            stem = f"{date}_{map_name}_{team_a}-vs-{team_b}_{score_a}-{score_b}"
-        else:
-            stem = f"{date}_{map_name}_{score_a}-{score_b}_{dem.stem}"
-        return f"{stem}.zip"
-    except Exception:
-        return f"{dem.stem}.zip"
+
+def _build_descriptive_from_meta(match_meta: dict, stem: str, date_str: str) -> str:
+    """Build a descriptive filename: {date}_{map}_{teamA}-vs-{teamB}_{scoreA}-{scoreB}.zip."""
+    map_name = _sanitize(match_meta.get("mapName", "unknown"))
+    team_a = _sanitize((match_meta.get("teamA") or {}).get("name") or "")
+    team_b = _sanitize((match_meta.get("teamB") or {}).get("name") or "")
+    score_a = (match_meta.get("teamA") or {}).get("score", 0)
+    score_b = (match_meta.get("teamB") or {}).get("score", 0)
+
+    if team_a and team_b:
+        file_stem = f"{date_str}_{map_name}_{team_a}-vs-{team_b}_{score_a}-{score_b}"
+    else:
+        file_stem = f"{date_str}_{map_name}_{score_a}-{score_b}_{stem}"
+    return f"{file_stem}.zip"
 
 
 def _sanitize(s: str) -> str:
@@ -263,6 +251,12 @@ def _sanitize(s: str) -> str:
     while '__' in s:
         s = s.replace('__', '_')
     return s.strip('_')
+
+
+def _mb_per_s(total_bytes: int, duration_seconds: float) -> float:
+    if not duration_seconds:
+        return 0.0
+    return round((total_bytes / 1_000_000) / duration_seconds, 3)
 
 
 def _write_batch_report(out_dir: Path, report: list[dict],
@@ -281,12 +275,8 @@ def _write_batch_report(out_dir: Path, report: list[dict],
         "durationSeconds": round(duration_seconds, 3),
         "demoBytes": demo_bytes,
         "zipBytes": zip_bytes,
-        "demoMegabytesPerSecond": round(
-            (demo_bytes / 1_000_000) / duration_seconds, 3
-        ) if duration_seconds else 0.0,
-        "zipMegabytesPerSecond": round(
-            (zip_bytes / 1_000_000) / duration_seconds, 3
-        ) if duration_seconds else 0.0,
+        "demoMegabytesPerSecond": _mb_per_s(demo_bytes, duration_seconds),
+        "zipMegabytesPerSecond": _mb_per_s(zip_bytes, duration_seconds),
         "compressionRatio": round(zip_bytes / demo_bytes, 4) if demo_bytes else None,
         "items": sorted(report, key=lambda r: r["demo"]),
     }
