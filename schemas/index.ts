@@ -1,5 +1,5 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v3.0.2)
+ * cs2-demo-format — Canonical Zod Schemas (v3.0.3)
  *
  * Strict export contract for CS2 demo ZIP packages.
  * `schemas/index.ts` is the single source of truth; JSON Schema files in
@@ -437,8 +437,11 @@ export type Shots = z.infer<typeof shotsSchema>;
 // ~1 Hz analytics (heatmaps, economy curves) stride by meta.sampleRate.
 //
 // Per round, each player carries parallel arrays of length `frameCount`. The
-// tick of frame `i` is `startTick + i * tickStep`. While a player is dead or
-// disconnected (flags alive bit = 0) the per-frame values are unspecified;
+// tick of frame `i` is `startTick + i * tickStep`. Replay starts at the round's
+// freezeEndTick and, for non-final rounds, extends to the last sampled tick
+// before the next round's startTick. rounds.endTick is the result-decision tick,
+// not the non-final event-window boundary. While a player is dead or disconnected
+// (flags alive bit = 0) the per-frame values are unspecified;
 // producers SHOULD repeat the last live value so delta streams stay compact.
 
 export const replayPlayerTrackSchema = z.object({

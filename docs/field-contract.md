@@ -98,9 +98,9 @@ Optional: `shots`, `replay`, `duels`。
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `roundNumber` | integer ≥ 1 | 从 1 开始连续 |
-| `startTick` | integer ≥ 1 | |
-| `freezeEndTick` | integer ≥ 1 | 冻结期结束（active play 开始） |
-| `endTick` | integer ≥ 1 | |
+| `startTick` | integer ≥ 1 | `round_start`，本回合冻结期开始 |
+| `freezeEndTick` | integer ≥ 1 | `round_freeze_end`，冻结期结束（active play 开始） |
+| `endTick` | integer ≥ 1 | `round_end`，本回合胜负判定 tick |
 | `teamASide` / `teamBSide` | `"t"` 或 `"ct"` | 必须互异 |
 | `teamAScoreBefore` / `teamBScoreBefore` | integer ≥ 0 | 进入本回合前比分 |
 | `teamAEconomy` / `teamBEconomy` | economy type | 队伍经济分类（5 名队员多数投票） |
@@ -186,7 +186,7 @@ Tick order: `startTick < freezeEndTick ≤ endTick`.
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `roundNumber` | integer ≥ 1 | |
-| `tick` | integer ≥ 1 | 在 [freezeEndTick, endTick] 内 |
+| `tick` | integer ≥ 1 | 在本回合事件窗口内：非最终回合为 `[freezeEndTick, nextRound.startTick)`，最终回合回退为 `[freezeEndTick, endTick]` |
 | `killerIndex` | integer 或 null | null = world/bomb kill |
 | `victimIndex` | integer ≥ 0 | |
 | `assisterIndex` | integer 或 null | |
@@ -305,6 +305,9 @@ v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 
 包的主位置/状态流，默认 8 Hz（每 tickrate/8 tick 一帧）。每回合每玩家一条 track，
 `frameCount` 个平行数组；帧 i 的 tick = `startTick + i × tickStep`。
+Replay track 从本回合 `freezeEndTick` 开始；非最终回合延伸到下一回合
+`startTick` 之前的最后一个采样 tick，用于保留回合结算、缴枪、捡枪等 post-round
+尾帧。`rounds.json.endTick` 表示胜负判定 tick，不是非最终回合事件窗口的结束点。
 
 除 `grenades` 外全部整数；`x`/`y`/`z`/`yaw`/`pitch`/`money`/`equipValue` 为 delta；
 `hp`/`armor`/`flash`/`flags`/`weapon`/`place`/`grenades` 存每帧原始值。

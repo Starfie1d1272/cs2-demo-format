@@ -1,6 +1,6 @@
 [project]
 name = "cs2df"
-version = "3.0.2"
+version = "3.0.3"
 description = "Reference exporter & validator CLI for cs2-demo-format v3 (CS2 demo → ZIP data package)"
 readme = "README.md"
 requires-python = ">=3.11"

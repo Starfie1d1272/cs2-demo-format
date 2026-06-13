@@ -30,7 +30,7 @@ wheels = [
 
 [[package]]
 name = "cs2df"
-version = "3.0.2"
+version = "3.0.3"
 source = { editable = "." }
 dependencies = [
     { name = "demoparser2" },

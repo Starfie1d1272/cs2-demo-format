@@ -4,6 +4,7 @@ dist/
 *.d.ts
 .DS_Store
 .omc/
+.codegraph/
 __pycache__/
 *.py[cod]
 .pytest_cache/

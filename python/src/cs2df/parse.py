@@ -351,7 +351,7 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     stage_started = time.perf_counter()
     round_ends = g_round["round_end"]
     step = max(1, tickrate // max(1, sample_rate))
-    replay_ticks = _build_sample_ticks(round_ends, round_freeze_ends, step)
+    replay_ticks = _build_sample_ticks(round_ends, round_freeze_ends, g_round["round_start"], step)
     replay_df = _safe_ticks_df(p, _REPLAY_PROPS, replay_ticks) if replay_ticks else None
     _record("parse.replayGrid", stage_started)
 
@@ -368,7 +368,8 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
         _p("duel windows (full tick)", 0.78)
         anchor_ticks = [int(r.get("tick") or 0) for r in deaths + hurts]
         duel_windows = _merge_windows(anchor_ticks, round_ends, round_freeze_ends,
-                                      tickrate, window_before_ms, window_after_ms)
+                                      g_round["round_start"], tickrate,
+                                      window_before_ms, window_after_ms)
         duel_ticks: list[int] = []
         for start, end in duel_windows:
             duel_ticks.extend(range(start, end + 1))
@@ -444,34 +445,50 @@ def _freeze_by_round(round_freeze_ends: list[dict]) -> dict[int, int]:
     return out
 
 
+def _round_starts_by_round(round_starts: list[dict]) -> dict[int, int]:
+    out: dict[int, int] = {}
+    for r in round_starts:
+        rn = int(r.get("total_rounds_played") or 0) + 1
+        t = int(r.get("tick") or 0)
+        if rn > 0 and t > 0 and rn not in out:
+            out[rn] = t
+    return out
+
+
 def _round_spans(round_ends: list[dict],
-                 round_freeze_ends: list[dict]) -> list[tuple[int, int]]:
-    """[(freeze_end_tick, end_tick)] for rounds with a valid window."""
+                 round_freeze_ends: list[dict],
+                 round_starts: list[dict] | None = None) -> list[tuple[int, int]]:
+    """[(freeze_end_tick, event_end_tick)] for rounds with a valid window."""
     freeze = _freeze_by_round(round_freeze_ends)
+    starts = _round_starts_by_round(round_starts or [])
     spans: list[tuple[int, int]] = []
     for r in round_ends:
         rn = int(r.get("total_rounds_played") or 0)
         end_t = int(r.get("tick") or 0)
+        next_start_t = starts.get(rn + 1)
+        event_end_t = next_start_t - 1 if next_start_t is not None else end_t
         start_t = freeze.get(rn, 0)
-        if start_t > 0 and end_t > start_t:
-            spans.append((start_t, end_t))
+        if start_t > 0 and event_end_t > start_t:
+            spans.append((start_t, event_end_t))
     return spans
 
 
 def _build_sample_ticks(round_ends: list[dict], round_freeze_ends: list[dict],
+                        round_starts: list[dict],
                         step: int) -> list[int]:
-    """Sorted unique sample ticks at interval `step` within active play."""
+    """Sorted unique sample ticks through the post-round tail."""
     ticks: list[int] = []
-    for start_t, end_t in _round_spans(round_ends, round_freeze_ends):
-        ticks.extend(range(start_t, end_t, step))
+    for start_t, end_t in _round_spans(round_ends, round_freeze_ends, round_starts):
+        ticks.extend(range(start_t, end_t + 1, step))
     return sorted(set(ticks))
 
 
 def _merge_windows(anchor_ticks: list[int], round_ends: list[dict],
-                   round_freeze_ends: list[dict], tickrate: int,
+                   round_freeze_ends: list[dict], round_starts: list[dict],
+                   tickrate: int,
                    before_ms: int, after_ms: int) -> list[tuple[int, int]]:
     """Merged [start, end] full-tick combat windows, clamped to round spans."""
-    spans = _round_spans(round_ends, round_freeze_ends)
+    spans = _round_spans(round_ends, round_freeze_ends, round_starts)
     if not spans or not anchor_ticks:
         return []
     before = (before_ms * tickrate) // 1000

@@ -6,6 +6,7 @@ Repository guidance for Codex/Claude agents working on `cs2-demo-format`.
 
 ```bash
 pnpm typecheck              # tsc --noEmit — covers schemas/, parser/, scripts/
+pnpm check:versions         # ensure npm package, Python package, and cs2df agree
 pnpm gen:schema             # regenerate spec/*.schema.json from Zod schemas
 pnpm validate:fixtures      # strict v3 fixture validation; legacy fixtures skipped
 
@@ -32,7 +33,7 @@ any schema change, run `pnpm gen:schema` and commit the updated `spec/` files.
 
 ## v3 Contract
 
-- Current package version: `3.0.0`.
+- Current package version: `3.0.3`.
 - Current manifest version: `schemaVersion: "cs2-demo-format/3.0"`.
 - Player references: `playerIndex` (zero-based index into players.json) replaces
   `steamId64` in all event/aggregate files. steamId64 appears only in players.json.
@@ -59,8 +60,10 @@ playerStats.adr = damageHealth / rounds
   changes → major.
 - New optional fields or new generated schemas → minor.
 - Documentation-only fixes → patch.
-- For releases, update `package.json`, `schemas/index.ts` header, `README.md`,
-  `CHANGELOG.md`, regenerate `spec/`, verify, then tag `vX.Y.Z`.
+- For releases, update `package.json`, `python/pyproject.toml`,
+  `python/src/cs2df/__init__.py`, `schemas/index.ts` header, `README.md`,
+  `CHANGELOG.md`, regenerate `spec/` if schemas changed, run
+  `pnpm check:versions`, verify, then tag `vX.Y.Z`.
 
 ## Notes
 

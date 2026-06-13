@@ -339,7 +339,8 @@ def _check_shots_stream(shots: dict, n_players: int, round_set: set,
                 break
         ticks = decode_delta(t.get("tick", []))
         rd = rounds_by_number.get(t.get("roundNumber"))
-        if rd and ticks and not all(rd.get("freezeEndTick", 0) <= tk <= rd.get("endTick", 0) for tk in ticks):
+        event_end = _round_event_end(rounds_by_number, t.get("roundNumber"))
+        if rd and ticks and event_end is not None and not all(rd.get("freezeEndTick", 0) <= tk <= event_end for tk in ticks):
             err(f"{label}: decoded ticks fall outside the round window")
 
 
@@ -370,7 +371,8 @@ def _check_replay_stream(replay: dict, n_players: int, round_set: set,
         step = rd_obj.get("tickStep", 1)
         if fc and rd:
             last_tick = start + (fc - 1) * step
-            if start < rd.get("freezeEndTick", 0) or last_tick > rd.get("endTick", 0):
+            event_end = _round_event_end(rounds_by_number, rn)
+            if event_end is not None and (start < rd.get("freezeEndTick", 0) or last_tick > event_end):
                 err(f"{label}: frame grid [{start}, {last_tick}] outside round window")
         for pi, track in enumerate(rd_obj.get("players", [])):
             tlabel = f"{label} players[{pi}]"
@@ -414,7 +416,8 @@ def _check_duels_stream(duels: dict, n_players: int, round_set: set,
         step = w.get("tickStep", 1)
         if fc and rd:
             last_tick = start + (fc - 1) * step
-            if start < rd.get("freezeEndTick", 0) or last_tick > rd.get("endTick", 0):
+            event_end = _round_event_end(rounds_by_number, rn)
+            if event_end is not None and (start < rd.get("freezeEndTick", 0) or last_tick > event_end):
                 err(f"{label}: frame grid [{start}, {last_tick}] outside round window")
         anchors = w.get("anchors", [])
         if not anchors:
@@ -499,7 +502,7 @@ def _check_tick_windows(name: str, rows: list, rounds_by_number: dict, err,
             if not isinstance(tick, int):
                 continue
             start = round_row.get("freezeEndTick")
-            end = round_row.get("endTick")
+            end = _round_event_end(rounds_by_number, row.get("roundNumber"))
             if not isinstance(start, int) or not isinstance(end, int):
                 continue
             if tick < start or tick > end:
@@ -508,6 +511,17 @@ def _check_tick_windows(name: str, rows: list, rounds_by_number: dict, err,
     if bad:
         sample = "; ".join(bad[:8])
         err(f"{name}.json: {len(bad)} row(s) have ticks outside their round window; sample: {sample}")
+
+
+def _round_event_end(rounds_by_number: dict, round_number) -> int | None:
+    round_row = rounds_by_number.get(round_number)
+    if not isinstance(round_row, dict):
+        return None
+    next_round = rounds_by_number.get(round_number + 1) if isinstance(round_number, int) else None
+    if isinstance(next_round, dict) and isinstance(next_round.get("startTick"), int):
+        return next_round["startTick"] - 1
+    end_tick = round_row.get("endTick")
+    return end_tick if isinstance(end_tick, int) else None
 
 
 def _check_bomb_lifecycle(bombs: list, err):

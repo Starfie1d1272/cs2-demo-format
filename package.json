@@ -1,6 +1,6 @@
 {
   "name": "cs2-demo-format",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Implementation-neutral CS2 demo export format with ZIP schemas, TypeScript types, and validators",
   "repository": {
     "type": "git",
@@ -24,6 +24,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "check:versions": "python3 tools/check_versions.py",
     "gen:schema": "tsx scripts/gen-json-schema.ts",
     "validate:fixtures": "tsx scripts/validate-fixtures.ts"
   },

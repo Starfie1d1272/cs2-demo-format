@@ -67,6 +67,9 @@ For every field and calculation rule, see
 
 ## v3.0.0 Highlights
 
+- **v3.0.3 preserves post-round tails.** Event/replay windows for non-final
+  rounds now run until the next round starts, while `rounds.endTick` remains the
+  result-decision tick.
 - **v3.0.2 adds held utility state.** `player-economies.json` can carry
   freeze-time grenade inventory, and `replay.json` can carry per-frame held
   grenades so replay UIs can show utility after throws or drops.
@@ -193,6 +196,7 @@ source of truth.
 After any schema change, run:
 
 ```bash
+pnpm check:versions
 pnpm gen:schema
 pnpm typecheck
 pnpm validate:fixtures
@@ -217,6 +221,8 @@ This package follows [Semantic Versioning](https://semver.org/).
   change the ZIP contract.
 
 Release tags use `vX.Y.Z` format.
+Before tagging, run `pnpm check:versions` so `package.json`,
+`python/pyproject.toml`, and `cs2df.__version__` stay aligned.
 
 ## License
 

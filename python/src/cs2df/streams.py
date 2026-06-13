@@ -178,8 +178,11 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
         })
 
     rounds_out: list[dict] = []
-    for w in sorted(round_model.windows, key=lambda w: w.round_number):
-        grid = np.arange(w.freeze_end_tick, w.end_tick, step, dtype="int64")
+    windows = sorted(round_model.windows, key=lambda w: w.round_number)
+    for i, w in enumerate(windows):
+        next_start_tick = windows[i + 1].start_tick if i + 1 < len(windows) else None
+        stop_tick = next_start_tick if next_start_tick is not None else w.end_tick + 1
+        grid = np.arange(w.freeze_end_tick, stop_tick, step, dtype="int64")
         if len(grid) == 0:
             continue
         sl = _slice_by_tick(df, tick_values, int(grid[0]), int(grid[-1]))

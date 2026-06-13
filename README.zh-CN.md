@@ -66,6 +66,8 @@ match.zip
   其他文件引用玩家行号。
 - **队伍和阵营通过推导得到。** 事件行不再重复 `teamKey` 或 `side`，consumer 从
   `players` + `rounds` 推导。
+- **v3.0.3 保留 post-round 尾段。** 非最终回合的事件/replay 窗口延伸到下一回合
+  开始前；`rounds.endTick` 仍表示胜负判定 tick。
 - **`replay.json` 是统一状态流。** 旧 `positions-1s.json` 被移除；replay 包含
   位置、视角、血量、护甲、金钱、装备价值、当前武器、区域名、闪光和 flags。
 - **列式流只存整数。** 位置、角度、金钱和装备价值均为紧凑整数数组；高频流在适合
@@ -180,6 +182,7 @@ cat fixtures/v3-mid/match.json
 schema 变更后运行：
 
 ```bash
+pnpm check:versions
 pnpm gen:schema
 pnpm typecheck
 pnpm validate:fixtures
@@ -203,6 +206,8 @@ pnpm validate:fixtures
 - **Patch：** 不改变 ZIP 合同的文档、校验工具或 exporter 修复。
 
 发布 tag 使用 `vX.Y.Z` 格式。
+打 tag 前运行 `pnpm check:versions`，确保 `package.json`、
+`python/pyproject.toml` 和 `cs2df.__version__` 一致。
 
 ## License
 

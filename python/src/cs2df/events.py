@@ -121,7 +121,8 @@ def _active_event_round_number(round_model: _RoundModel, row: dict) -> int | Non
         return None
     tick = int(row.get("tick") or 0)
     window = round_model.window_for_round(n)
-    if window is None or tick < window.freeze_end_tick or tick > window.end_tick:
+    event_end = round_model.event_end_tick(n)
+    if window is None or event_end is None or tick < window.freeze_end_tick or tick > event_end:
         return None
     return n
 
@@ -372,7 +373,8 @@ def build_bombs(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
                 continue
             tick = int(r.get("tick") or 0)
             window = round_model.window_for_round(n)
-            if window is None or tick < window.freeze_end_tick or tick > window.end_tick:
+            event_end = round_model.event_end_tick(n)
+            if window is None or event_end is None or tick < window.freeze_end_tick or tick > event_end:
                 continue
             actor_sid = _sid(r.get("user_steamid") or r.get("steamid") or r.get("userid"))
             site = bomb_site_from_place(r.get("user_last_place_name"))
@@ -431,7 +433,8 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
             continue
         tick = int(r.get("tick") or 0)
         window = round_model.window_for_round(n)
-        if window is None or tick < window.freeze_end_tick or tick > window.end_tick:
+        event_end = round_model.event_end_tick(n)
+        if window is None or event_end is None or tick < window.freeze_end_tick or tick > event_end:
             continue
         gtype = str(r.get("_grenade_type") or "")
         if gtype not in _GRENADE_TYPE_ENUM:
@@ -460,7 +463,7 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
         if not _is_valid_side(round_model.side_map.get((n, players.team(thrower_sid)), "unknown")):
             continue
         if destroy_tick is not None and (
-            destroy_tick < tick or window is None or destroy_tick > window.end_tick
+            destroy_tick < tick or event_end is None or destroy_tick > event_end
         ):
             destroy_tick = None
 
@@ -489,13 +492,13 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
     for g in out:
         if g["grenade"] != "molotov" or g["destroyTick"] is not None:
             continue
-        window = round_model.window_for_round(g["roundNumber"])
+        event_end = round_model.event_end_tick(g["roundNumber"])
         best = None
         best_d2 = None
         for e in expires:
             if e["used"] or e["rn"] != g["roundNumber"] or e["tick"] < g["effectTick"]:
                 continue
-            if window is not None and e["tick"] > window.end_tick:
+            if event_end is not None and e["tick"] > event_end:
                 continue
             ep, gp = e["pos"], g["effectPosition"]
             d2 = (ep["x"] - gp["x"]) ** 2 + (ep["y"] - gp["y"]) ** 2
@@ -521,11 +524,11 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
         eid = g.pop("_entityId", None)
         if g["grenade"] != "smoke" or eid is None:
             continue
-        window = round_model.window_for_round(g["roundNumber"])
+        event_end = round_model.event_end_tick(g["roundNumber"])
         for e in smoke_index.get((g["roundNumber"], eid), []):
             if e["tick"] < g["effectTick"]:
                 continue
-            if window is not None and e["tick"] > window.end_tick:
+            if event_end is not None and e["tick"] > event_end:
                 continue
             g["destroyTick"] = e["tick"]
             break

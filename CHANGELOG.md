@@ -3,6 +3,16 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 3.0.3 — 2026-06-14
+
+### Fixed
+
+- **post-round 事件窗口**：非最终回合的事件、shots、replay、duels 归属窗口延伸到
+  下一回合 `startTick` 前，保留 `round_end` 后到下一回合冻结期开始前的击杀、
+  缴枪、捡枪和状态尾段；`rounds.endTick` 继续表示胜负判定 tick。
+- **版本一致性**：`cs2df.__version__` 跟随包版本升级，并新增 `pnpm check:versions`
+  防止 npm/Python/module 版本再次漏 bump。
+
 ## 3.0.2 — 2026-06-13
 
 ### Added

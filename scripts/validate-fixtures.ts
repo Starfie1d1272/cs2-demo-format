@@ -256,7 +256,7 @@ function runPackageQa(data: Record<string, unknown>): number {
   // ── columnar stream QA ──────────────────────────────────────────────────
   if (shots) qaErrors += qaShots(shots, nPlayers, roundSet, roundsByNumber);
   if (replay) qaErrors += qaStream("replay.json", asRows(replay.rounds), nPlayers, roundSet, roundsByNumber,
-    ["x", "y", "z", "yaw", "pitch", "hp", "armor", "money", "equipValue", "weapon", "place", "flash", "flags"]);
+                                   ["x", "y", "z", "yaw", "pitch", "hp", "armor", "money", "equipValue", "weapon", "place", "flash", "flags"]);
   if (duels) qaErrors += qaStream("duels.json", asRows(duels.windows), nPlayers, roundSet, roundsByNumber,
     ["x", "y", "z", "yaw", "pitch", "hp", "flash"]);
 
@@ -291,7 +291,8 @@ function qaShots(shots: Row, nPlayers: number, roundSet: Set<number>, roundsByNu
     const round = roundsByNumber.get(track.roundNumber);
     if (round && Array.isArray(track.tick)) {
       const ticks = decodeDelta(track.tick as number[]);
-      if (ticks.some((t) => t < Number(round.freezeEndTick) || t > Number(round.endTick))) {
+      const eventEnd = roundEventEnd(roundsByNumber, Number(track.roundNumber));
+      if (ticks.some((t) => t < Number(round.freezeEndTick) || t > eventEnd)) {
         qaErrors += qaError(`${label}: decoded ticks fall outside the round window`);
       }
     }
@@ -315,7 +316,8 @@ function qaStream(name: string, blocks: Row[], nPlayers: number, roundSet: Set<n
     const step = Number(block.tickStep);
     if (round && fc > 0) {
       const last = start + (fc - 1) * step;
-      if (start < Number(round.freezeEndTick) || last > Number(round.endTick)) {
+      const eventEnd = roundEventEnd(roundsByNumber, Number(rn));
+      if (start < Number(round.freezeEndTick) || last > eventEnd) {
         qaErrors += qaError(`${label}: frame grid [${start}, ${last}] outside round window`);
       }
     }
@@ -334,6 +336,15 @@ function qaStream(name: string, blocks: Row[], nPlayers: number, roundSet: Set<n
     }
   }
   return qaErrors;
+}
+
+function roundEventEnd(roundsByNumber: Map<unknown, Row>, roundNumber: number): number {
+  const round = roundsByNumber.get(roundNumber);
+  const nextRound = roundsByNumber.get(roundNumber + 1);
+  if (nextRound && typeof nextRound.startTick === "number") {
+    return Number(nextRound.startTick) - 1;
+  }
+  return Number(round?.endTick ?? 0);
 }
 
 function asRows(value: unknown): Row[] {
