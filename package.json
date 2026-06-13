@@ -34,6 +34,7 @@
     "esports",
     "schema"
   ],
+  "packageManager": "pnpm@11.6.0",
   "license": "MIT",
   "dependencies": {
     "jszip": "^3.10.1"
