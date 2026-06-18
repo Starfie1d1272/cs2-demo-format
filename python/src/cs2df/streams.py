@@ -85,48 +85,6 @@ def _slice_by_tick(df, tick_values, start: int, end: int):
     return df.iloc[left:right]
 
 
-# ── bomb carrier timeline (replaces per-frame inventory parsing) ──────────────
-
-def build_bomb_carrier_timeline(raw: dict, players: PlayerDirectory):
-    """(transition_ticks, carrier_pidx) arrays for hasBomb lookups.
-
-    Derived from bomb lifecycle events: pickup → carrier, dropped/planted/
-    exploded/defused → no carrier. This replaces extracting the `inventory`
-    tick prop on the whole replay grid, which is the single most expensive
-    per-frame property in demoparser2.
-    """
-    import numpy as np
-
-    transitions: list[tuple[int, int]] = []  # (tick, pidx or -1)
-    for rows_key, is_pickup in (("bomb_pickup", True), ("bomb_dropped", False),
-                                ("bomb_planted", False), ("bomb_exploded", False),
-                                ("bomb_defused", False)):
-        for r in raw.get(rows_key, []):
-            tick = int(r.get("tick") or 0)
-            if tick <= 0:
-                continue
-            if is_pickup:
-                idx = players.idx(_sid(r.get("user_steamid") or r.get("steamid")))
-                transitions.append((tick, idx if idx is not None else -1))
-            else:
-                transitions.append((tick, -1))
-    transitions.sort()
-    ticks = np.asarray([t for t, _ in transitions], dtype="int64")
-    carrier = np.asarray([c for _, c in transitions], dtype="int64")
-    return ticks, carrier
-
-
-def _carrier_at(ticks, carrier, frame_ticks):
-    """Vectorized carrier playerIndex (or -1) at each frame tick."""
-    import numpy as np
-
-    if len(ticks) == 0:
-        return np.full(len(frame_ticks), -1, dtype="int64")
-    pos = np.searchsorted(ticks, frame_ticks, side="right") - 1
-    out = np.where(pos >= 0, carrier[np.clip(pos, 0, None)], -1)
-    return out
-
-
 # ── replay.json ───────────────────────────────────────────────────────────────
 
 def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
@@ -155,10 +113,13 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
     df["_plidx"] = df["last_place_name"].map(place_map).fillna(-1).astype("int64")
     if "inventory" in df.columns:
         df["_grenades"] = df["inventory"].map(lambda items: classify_inventory(items)[3])
+        df["_has_bomb"] = df["inventory"].map(
+            lambda items: isinstance(items, (list, tuple))
+            and any(normalize_weapon_name(item) == "c4" for item in items)
+        )
     else:
         df["_grenades"] = [[] for _ in range(len(df))]
-
-    bomb_ticks, bomb_carrier = build_bomb_carrier_timeline(raw, players)
+        df["_has_bomb"] = False
     tick_values = df["tick"].to_numpy()
 
     # projectile trajectories per round
@@ -190,7 +151,7 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
             continue
         player_tracks = []
         for pidx, g in sl.groupby("_pidx", sort=True):
-            track = _player_track(g, grid, int(pidx), bomb_ticks, bomb_carrier)
+            track = _player_track(g, grid, int(pidx))
             if track is not None:
                 player_tracks.append(track)
         if not player_tracks:
@@ -219,7 +180,7 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
     }
 
 
-def _player_track(g, grid, pidx: int, bomb_ticks, bomb_carrier) -> dict | None:
+def _player_track(g, grid, pidx: int) -> dict | None:
     """One player's columnar track aligned to the round grid.
 
     Frames where the player has no row (dead/disconnected) repeat the last
@@ -260,8 +221,8 @@ def _player_track(g, grid, pidx: int, bomb_ticks, bomb_carrier) -> dict | None:
 
     alive = (hp > 0).astype("int64")
     has_kit = _num(aligned["has_defuser"], 0.0).to_numpy().astype(bool)
-    carrier = _carrier_at(bomb_ticks, bomb_carrier, grid)
-    has_bomb = (carrier == pidx) & (alive == 1)
+    has_bomb = aligned["_has_bomb"].fillna(False).to_numpy().astype(bool)
+    has_bomb = has_bomb & present & (alive == 1)
     flags = (alive * FLAG_ALIVE
              + has_bomb.astype("int64") * FLAG_HAS_BOMB
              + (has_kit & present & (alive == 1)).astype("int64") * FLAG_HAS_DEFUSE_KIT)

@@ -33,7 +33,7 @@ any schema change, run `pnpm gen:schema` and commit the updated `spec/` files.
 
 ## v3 Contract
 
-- Current package version: `3.0.3`.
+- Current package version: `3.0.4`.
 - Current manifest version: `schemaVersion: "cs2-demo-format/3.0"`.
 - Player references: `playerIndex` (zero-based index into players.json) replaces
   `steamId64` in all event/aggregate files. steamId64 appears only in players.json.

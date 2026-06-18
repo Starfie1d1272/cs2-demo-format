@@ -54,6 +54,33 @@ def test_replay_round_extends_to_sample_before_next_round_start():
     assert last_tick < 300
 
 
+def test_replay_marks_round_start_bomb_carrier_from_inventory():
+    players = PlayerDirectory([
+        {"steamId64": "76561198000000001", "name": "p1", "teamKey": "teamA"},
+    ])
+    round_model = _RoundModel(
+        windows=[
+            _RoundWindow(round_number=1, start_tick=50, freeze_end_tick=100, end_tick=200),
+            _RoundWindow(round_number=2, start_tick=300, freeze_end_tick=360, end_tick=460),
+        ],
+        side_map={},
+    )
+    rows = [_replay_row(tick) for tick in range(360, 461, 16)]
+    for row in rows:
+        row["inventory"] = ["C4 Explosive"]
+    raw = {
+        "replay_df": pd.DataFrame(rows),
+        "grenade_trajectories": [],
+    }
+
+    replay = build_replay(raw, players, round_model, tickrate=128, sample_rate=8)
+
+    assert replay is not None
+    second_round = replay["rounds"][0]
+    assert second_round["roundNumber"] == 2
+    assert all(flags & 2 for flags in second_round["players"][0]["flags"])
+
+
 def test_parse_replay_ticks_include_post_round_tail_before_next_start():
     round_ends = [
         {"total_rounds_played": 1, "tick": 200},

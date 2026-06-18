@@ -9,9 +9,8 @@ Performance notes (this module is the reference for fast producers):
   ~200k row dicts (`to_dict(orient="records")`), which dominated Python-side
   time; v3's columnar layout makes that conversion unnecessary.
 - `inventory` (a per-row list of strings, by far the most expensive tick prop)
-  is NOT extracted on the per-frame grid. The bomb-carrier flag is derived
-  from bomb lifecycle events instead (see streams.build_bomb_carrier_timeline);
-  inventory is only read at the ~24 freeze ticks for economy rows.
+  is extracted on the sampled replay grid for held utility and bomb-carrier
+  state, and at freeze ticks for economy rows.
 - The research-profile duel windows reuse the already-parsed kill/damage ticks
   to compute merged combat windows, then fetch them in ONE lean `parse_ticks`
   call (6 props at full tick) instead of widening the main grid.

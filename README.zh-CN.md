@@ -62,6 +62,8 @@ match.zip
 
 ## v3.0.0 重点
 
+- **v3.0.4 修复 replay 持包状态。** `flags & 2` 改为从逐帧采样的玩家
+  inventory 推导，包括新回合自动分配 C4 且没有 pickup 事件的情况。
 - **`playerIndex` 是标准玩家引用。** `steamId64` 只出现在 `players.json`，
   其他文件引用玩家行号。
 - **队伍和阵营通过推导得到。** 事件行不再重复 `teamKey` 或 `side`，consumer 从

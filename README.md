@@ -67,6 +67,9 @@ For every field and calculation rule, see
 
 ## v3.0.0 Highlights
 
+- **v3.0.4 fixes replay bomb-carrier state.** `flags & 2` now comes from the
+  sampled player inventory, including rounds where C4 is assigned without a
+  pickup event.
 - **v3.0.3 preserves post-round tails.** Event/replay windows for non-final
   rounds now run until the next round starts, while `rounds.endTick` remains the
   result-decision tick.

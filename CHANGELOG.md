@@ -3,6 +3,14 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 3.0.4 — 2026-06-18
+
+### Fixed
+
+- **replay 持包状态缺失**：`flags & 2 (hasBomb)` 改为直接从已采样的逐帧
+  `inventory` 推导，不再依赖不完整的炸弹事件状态机。修复新回合自动分配 C4
+  且持包者未丢包、未捡包时，整个回合 replay 缺失持包标记的问题。（#4）
+
 ## 3.0.3 — 2026-06-14
 
 ### Fixed
