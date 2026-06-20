@@ -160,7 +160,13 @@ def build_players(raw: dict) -> PlayerDirectory:
         if not sid or sid in seen or not _is_valid_steamid(sid):
             continue
         seen.add(sid)
-        team_key = team_num_to_key.get(int(r.get("team_num") or 0))
+        # team_num 可能为 NaN（polars float 缺失列）——典型是有合法 steamid 但无队伍的
+        # 教练/观察员。注意 NaN 在 Python 中为真值，`NaN or 0` 仍是 NaN，int(NaN) 会抛
+        # ValueError，必须显式判 None/NaN 后跳过（等价于无 teamKey）。
+        tn = r.get("team_num")
+        if tn is None or tn != tn:
+            continue
+        team_key = team_num_to_key.get(int(tn))
         if not team_key:
             continue
         out.append({"steamId64": sid, "name": str(r.get("name") or sid), "teamKey": team_key})

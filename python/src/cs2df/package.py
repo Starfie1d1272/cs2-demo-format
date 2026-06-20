@@ -65,6 +65,42 @@ def export_demo(dem_path: str, *, research: bool = False, sample_rate: int = 8,
                          compress_level=compress_level)
 
 
+def export_demo_merged(dem_paths: list[str], *, research: bool = False, sample_rate: int = 8,
+                       window_before_ms: int = 2000, window_after_ms: int = 1000,
+                       compress_level: int = 3,
+                       progress: ProgressFn | None = None) -> tuple[bytes, dict]:
+    """Parse several split GOTV parts of ONE match, merge, and build a single ZIP.
+
+    Use for HLTV demos split into ``…-p1.dem`` / ``…-p2.dem``: ticks are reconciled
+    onto a global timeline so the package's per-match derivations stay coherent.
+    """
+    if len(dem_paths) == 1:
+        return export_demo(dem_paths[0], research=research, sample_rate=sample_rate,
+                           window_before_ms=window_before_ms, window_after_ms=window_after_ms,
+                           compress_level=compress_level, progress=progress)
+    from .merge import parse_and_merge
+
+    # Combined hash over all parts, in order, so the merged package has a stable id.
+    try:
+        h = hashlib.sha256()
+        for part in dem_paths:
+            h.update(_sha256_hex(part).encode("ascii"))
+        demo_hash: str | None = h.hexdigest()
+    except Exception:
+        demo_hash = None
+
+    scaled = (lambda stage, frac: progress(stage, frac * 0.9)) if progress else None
+    raw = parse_and_merge(list(dem_paths), sample_rate=sample_rate, research=research,
+                          window_before_ms=window_before_ms,
+                          window_after_ms=window_after_ms, progress=scaled)
+    if progress:
+        progress("build package", 0.92)
+    return build_package(raw, dem_paths[0], demo_hash,
+                         window_before_ms=window_before_ms,
+                         window_after_ms=window_after_ms,
+                         compress_level=compress_level)
+
+
 def build_package(raw: dict[str, Any], dem_path: str, demo_hash: str | None, *,
                   window_before_ms: int = 2000, window_after_ms: int = 1000,
                   compress_level: int = 3) -> tuple[bytes, dict]:

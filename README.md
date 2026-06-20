@@ -67,6 +67,10 @@ For every field and calculation rule, see
 
 ## v3.0.0 Highlights
 
+- **v3.1.0 adds multi-part demo merging.** Pass split GOTV parts
+  (`…-p1.dem …-p2.dem`) to `cs2df export` and they are merged into one
+  coherent v3 ZIP; tick timelines are reconciled and duplicate round events
+  from the recording resume are filtered automatically.
 - **v3.0.4 fixes replay bomb-carrier state.** `flags & 2` now comes from the
   sampled player inventory, including rounds where C4 is assigned without a
   pickup event.
@@ -102,6 +106,9 @@ uv sync
 
 # Standard export: required files + shots.json + replay.json
 uv run cs2df export match.dem
+
+# Multi-part GOTV recording (HLTV split demos) — merged into one ZIP
+uv run cs2df export match-p1.dem match-p2.dem
 
 # Research export: also includes full-tick duels.json windows
 uv run cs2df export match.dem --research

@@ -3,6 +3,20 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 3.1.0 — 2026-06-21
+
+### Added
+
+- **多段 demo 合并**：`cs2df export` 现接受多个 `.dem` 路径（`…-p1.dem …-p2.dem`），
+  自动合并为单个 v3 ZIP。新增 `merge.py` 模块，将各段 tick 时钟对齐到全局单调时间线、
+  过滤恢复录制的重叠回合事件和残留战斗事件，输出文件名自动去掉 `-pN` 后缀。
+  公开新函数 `cs2df.package.export_demo_merged()`，`build_package` 流程无需修改。
+
+### Fixed
+
+- **教练/观察员 NaN `team_num` 崩溃**：`build_players` 现在正确跳过 `team_num` 为
+  polars float NaN 的行（`int(NaN)` 会抛 `ValueError`），不再因教练席条目导致解析失败。
+
 ## 3.0.4 — 2026-06-18
 
 ### Fixed

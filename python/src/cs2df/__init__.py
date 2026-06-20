@@ -5,7 +5,7 @@ demoparser2 / pandas stack installed. Heavy imports are deferred into the
 submodules that need them.
 """
 
-__version__ = "3.0.4"
+__version__ = "3.1.0"
 
 SCHEMA_VERSION = "cs2-demo-format/3.0"
 EXPORTER_NAME = "cs2df"

@@ -12,6 +12,7 @@ import argparse
 import builtins
 import json
 import os
+import re
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -27,7 +28,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_exp = sub.add_parser("export", help="export a CS2 .dem to a v3 ZIP package")
-    p_exp.add_argument("demo", help="path to the .dem file")
+    p_exp.add_argument("demo", nargs="+",
+                       help="path to the .dem file; pass multiple split parts "
+                            "(…-p1.dem …-p2.dem) of ONE match to merge them")
     p_exp.add_argument("-o", "--output", default=None,
                        help="output zip path (default: <demo>.zip next to the input)")
     p_exp.add_argument("--research", action="store_true",
@@ -78,16 +81,20 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_export(args) -> int:
-    from .package import export_demo
+    from .package import export_demo_merged
 
-    dem = Path(args.demo)
-    if not dem.exists():
-        print(f"ERROR: demo not found: {dem}", file=sys.stderr)
+    dems = [Path(d) for d in args.demo]
+    missing = [str(d) for d in dems if not d.exists()]
+    if missing:
+        print(f"ERROR: demo not found: {', '.join(missing)}", file=sys.stderr)
         return 1
     if not _compress_level_ok(args.compress_level):
         print("ERROR: --compress-level must be between 0 and 9", file=sys.stderr)
         return 1
-    out = Path(args.output) if args.output else dem.with_suffix(".zip")
+    # 多段合并时输出名去掉 -pN 后缀，落到第一段同目录。
+    first = dems[0]
+    default_stem = re.sub(r"-p\d+$", "", first.stem)
+    out = Path(args.output) if args.output else first.with_name(default_stem + ".zip")
 
     t0 = time.perf_counter()
     progress = None
@@ -95,12 +102,14 @@ def _cmd_export(args) -> int:
         def progress(stage: str, frac: float) -> None:
             print(f"  [{frac * 100:5.1f}%] {stage}")
 
-    data, _match_meta = export_demo(str(dem), research=args.research,
-                                     sample_rate=args.sample_rate,
-                                     window_before_ms=args.window_before,
-                                     window_after_ms=args.window_after,
-                                     compress_level=args.compress_level,
-                                     progress=progress)
+    if len(dems) > 1:
+        print(f"合并 {len(dems)} 段 → {out.name}")
+    data, _match_meta = export_demo_merged([str(d) for d in dems], research=args.research,
+                                           sample_rate=args.sample_rate,
+                                           window_before_ms=args.window_before,
+                                           window_after_ms=args.window_after,
+                                           compress_level=args.compress_level,
+                                           progress=progress)
     out.write_bytes(data)
     dt = time.perf_counter() - t0
     print(f"wrote {out} ({len(data) / 1e6:.2f} MB) in {dt:.1f}s")
