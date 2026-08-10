@@ -60,10 +60,16 @@ match.zip
 
 每个字段和计算规则见 [`docs/field-contract.md`](./docs/field-contract.md)。
 
-## v3.0.0 重点
+## v3.x 重点
 
+- **v3.1.0 支持多段 demo 合并。** 把分段 GOTV 录像（`…-p1.dem …-p2.dem`）
+  传给 `cs2df export`，会合并成一个连贯的 v3 ZIP；tick 时间线自动对齐，
+  recording resume 附近产生的重复回合事件会被自动过滤。
 - **v3.0.4 修复 replay 持包状态。** `flags & 2` 改为从逐帧采样的玩家
   inventory 推导，包括新回合自动分配 C4 且没有 pickup 事件的情况。
+- **v3.0.2 增加 held utility 状态。** `player-economies.json` 可携带
+  freeze-time 手雷清单，`replay.json` 可携带逐帧手持手雷状态，replay UI
+  可以展示投掷/丢弃后的道具情况。
 - **`playerIndex` 是标准玩家引用。** `steamId64` 只出现在 `players.json`，
   其他文件引用玩家行号。
 - **队伍和阵营通过推导得到。** 事件行不再重复 `teamKey` 或 `side`，consumer 从
@@ -90,6 +96,9 @@ uv sync
 
 # 标准导出：必需文件 + shots.json + replay.json
 uv run cs2df export match.dem
+
+# 多段 GOTV 录像（HLTV 分段 demo）— 合并为一个 ZIP
+uv run cs2df export match-p1.dem match-p2.dem
 
 # Research 导出：额外包含满 tick duels.json
 uv run cs2df export match.dem --research

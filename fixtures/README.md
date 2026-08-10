@@ -20,8 +20,8 @@ Validate it with:
 pnpm validate:fixtures
 ```
 
-Regenerate from the local benchmark demo, assuming sibling repositories live
-under `/Users/starfie1d/GitHub`:
+Regenerate from the local benchmark demo, assuming `cs2-demo-analysis-kit` is
+checked out as a sibling repository:
 
 ```bash
 cd python
