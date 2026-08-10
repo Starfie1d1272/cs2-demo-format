@@ -65,7 +65,7 @@ The files fall into four groups:
 For every field and calculation rule, see
 [`docs/field-contract.md`](./docs/field-contract.md).
 
-## v3.0.0 Highlights
+## v3.x Highlights
 
 - **v3.1.0 adds multi-part demo merging.** Pass split GOTV parts
   (`…-p1.dem …-p2.dem`) to `cs2df export` and they are merged into one
