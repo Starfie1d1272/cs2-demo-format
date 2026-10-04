@@ -1,203 +1,196 @@
 {
-  "$ref": "#/definitions/replay",
-  "definitions": {
-    "replay": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "meta": {
       "type": "object",
       "properties": {
-        "meta": {
-          "type": "object",
-          "properties": {
-            "sampleRate": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "tickrate": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "coordScale": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "angleScale": {
-              "type": "integer",
-              "minimum": 1
-            }
+        "sampleRate": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "tickrate": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "coordScale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "angleScale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "sampleRate",
+        "tickrate",
+        "coordScale",
+        "angleScale"
+      ],
+      "additionalProperties": false
+    },
+    "weaponDict": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "placeDict": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rounds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
           },
-          "required": [
-            "sampleRate",
-            "tickrate",
-            "coordScale",
-            "angleScale"
-          ],
-          "additionalProperties": false
-        },
-        "weaponDict": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "placeDict": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "rounds": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "roundNumber": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "startTick": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "tickStep": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "frameCount": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "players": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "playerIndex": {
-                      "type": "integer",
-                      "minimum": 0
-                    },
-                    "x": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "y": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "z": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "yaw": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "pitch": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "hp": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "armor": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "money": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "equipValue": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "weapon": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer",
-                        "minimum": -1
-                      }
-                    },
-                    "place": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer",
-                        "minimum": -1
-                      }
-                    },
-                    "flash": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "flags": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "grenades": {
-                      "type": "array",
-                      "items": {
-                        "type": "array",
-                        "items": {
-                          "type": "string",
-                          "enum": [
-                            "flashbang",
-                            "smoke",
-                            "molotov",
-                            "incendiary",
-                            "hegrenade",
-                            "decoy"
-                          ]
-                        }
-                      },
-                      "default": []
-                    }
-                  },
-                  "required": [
-                    "playerIndex",
-                    "x",
-                    "y",
-                    "z",
-                    "yaw",
-                    "pitch",
-                    "hp",
-                    "armor",
-                    "money",
-                    "equipValue",
-                    "weapon",
-                    "place",
-                    "flash",
-                    "flags"
-                  ],
-                  "additionalProperties": false
-                }
-              },
-              "projectiles": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "grenade": {
+          "startTick": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "tickStep": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "frameCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "playerIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "x": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "y": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "z": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "yaw": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "pitch": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "hp": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "armor": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "money": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "equipValue": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "weapon": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "place": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "flash": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "flags": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "grenades": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
                       "type": "string",
                       "enum": [
                         "flashbang",
@@ -207,73 +200,117 @@
                         "hegrenade",
                         "decoy"
                       ]
-                    },
-                    "throwerIndex": {
-                      "anyOf": [
-                        {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "startTick": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "x": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "y": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
-                    },
-                    "z": {
-                      "type": "array",
-                      "items": {
-                        "type": "integer"
-                      }
                     }
-                  },
-                  "required": [
-                    "grenade",
-                    "throwerIndex",
-                    "startTick",
-                    "x",
-                    "y",
-                    "z"
-                  ],
-                  "additionalProperties": false
+                  }
                 }
-              }
-            },
-            "required": [
-              "roundNumber",
-              "startTick",
-              "tickStep",
-              "frameCount",
-              "players",
-              "projectiles"
-            ],
-            "additionalProperties": false
+              },
+              "required": [
+                "playerIndex",
+                "x",
+                "y",
+                "z",
+                "yaw",
+                "pitch",
+                "hp",
+                "armor",
+                "money",
+                "equipValue",
+                "weapon",
+                "place",
+                "flash",
+                "flags",
+                "grenades"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "projectiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "grenade": {
+                  "type": "string",
+                  "enum": [
+                    "flashbang",
+                    "smoke",
+                    "molotov",
+                    "incendiary",
+                    "hegrenade",
+                    "decoy"
+                  ]
+                },
+                "throwerIndex": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "startTick": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "x": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "y": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "z": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              "required": [
+                "grenade",
+                "throwerIndex",
+                "startTick",
+                "x",
+                "y",
+                "z"
+              ],
+              "additionalProperties": false
+            }
           }
-        }
-      },
-      "required": [
-        "meta",
-        "weaponDict",
-        "placeDict",
-        "rounds"
-      ],
-      "additionalProperties": false
+        },
+        "required": [
+          "roundNumber",
+          "startTick",
+          "tickStep",
+          "frameCount",
+          "players",
+          "projectiles"
+        ],
+        "additionalProperties": false
+      }
     }
   },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "required": [
+    "meta",
+    "weaponDict",
+    "placeDict",
+    "rounds"
+  ],
+  "additionalProperties": false
 }

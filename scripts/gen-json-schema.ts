@@ -8,7 +8,7 @@
  * Run: pnpm gen:schema
  */
 
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { SCHEMAS_BY_KEY, manifestSchema } from "../schemas/index.js";
@@ -17,15 +17,14 @@ const specDir = join(process.cwd(), "spec");
 
 mkdirSync(specDir, { recursive: true });
 
-const entries: Array<[string, Parameters<typeof zodToJsonSchema>[0]]> = [
+const entries: Array<[string, z.ZodType]> = [
   ["manifest", manifestSchema],
   ...Object.entries(SCHEMAS_BY_KEY),
 ];
 
 for (const [key, schema] of entries) {
-  const jsonSchema = zodToJsonSchema(schema, {
-    name: key,
-    $refStrategy: "none",
+  const jsonSchema = z.toJSONSchema(schema, {
+    target: "draft-7",
   });
 
   const outPath = join(specDir, `${key}.schema.json`);
