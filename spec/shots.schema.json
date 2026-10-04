@@ -1,133 +1,151 @@
 {
-  "$ref": "#/definitions/shots",
-  "definitions": {
-    "shots": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "meta": {
       "type": "object",
       "properties": {
-        "meta": {
-          "type": "object",
-          "properties": {
-            "coordScale": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "angleScale": {
-              "type": "integer",
-              "minimum": 1
-            }
-          },
-          "required": [
-            "coordScale",
-            "angleScale"
-          ],
-          "additionalProperties": false
+        "coordScale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         },
-        "weaponDict": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "tracks": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "roundNumber": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "playerIndex": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "tick": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "weapon": {
-                "type": "array",
-                "items": {
-                  "type": "integer",
-                  "minimum": -1
-                }
-              },
-              "x": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "y": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "z": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "vx": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "vy": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "vz": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "yaw": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              },
-              "pitch": {
-                "type": "array",
-                "items": {
-                  "type": "integer"
-                }
-              }
-            },
-            "required": [
-              "roundNumber",
-              "playerIndex",
-              "tick",
-              "weapon",
-              "x",
-              "y",
-              "z",
-              "vx",
-              "vy",
-              "vz",
-              "yaw",
-              "pitch"
-            ],
-            "additionalProperties": false
-          }
+        "angleScale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         }
       },
       "required": [
-        "meta",
-        "weaponDict",
-        "tracks"
+        "coordScale",
+        "angleScale"
       ],
       "additionalProperties": false
+    },
+    "weaponDict": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "roundNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "playerIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "tick": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "weapon": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -1,
+              "maximum": 9007199254740991
+            }
+          },
+          "x": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "y": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "z": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "vx": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "vy": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "vz": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "yaw": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "pitch": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "required": [
+          "roundNumber",
+          "playerIndex",
+          "tick",
+          "weapon",
+          "x",
+          "y",
+          "z",
+          "vx",
+          "vy",
+          "vz",
+          "yaw",
+          "pitch"
+        ],
+        "additionalProperties": false
+      }
     }
   },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  "required": [
+    "meta",
+    "weaponDict",
+    "tracks"
+  ],
+  "additionalProperties": false
 }
