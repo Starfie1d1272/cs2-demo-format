@@ -199,6 +199,12 @@ Tick order: `startTick < freezeEndTick ≤ endTick`.
 | `killerPosition` | vec3 或 null | 整数坐标 |
 | `victimPosition` | vec3 | 整数坐标 |
 
+参考导出器按 `(roundNumber, tick)` 稳定排序击杀；同 tick 保留源事件顺序。
+补枪要求前后两次均为敌方击杀、发生在同一回合，当前死者是前一次击杀者，
+当前击杀者与前一次死者同队，且时间差在 `[0, 6 × tickrate]` 内。
+只关联最近一条满足条件的队友死亡。自杀、队杀和 world 死亡均不参与补枪。
+同 tick 的归属依赖源顺序，不能从 tick 精度推断更细的实际先后。
+
 ---
 
 ## damages.json
