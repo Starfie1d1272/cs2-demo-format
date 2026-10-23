@@ -50,6 +50,6 @@ jobs:
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
-      - run: uv sync --dev --locked
+      - run: uv sync --dev --locked --no-config --default-index https://pypi.org/simple
 
-      - run: uv run --locked pytest
+      - run: uv run --locked --no-config --default-index https://pypi.org/simple pytest

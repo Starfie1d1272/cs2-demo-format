@@ -9,3 +9,5 @@
 验证安装稳定性：保存锁文件 SHA-256，连续执行冻结安装与日常 `pnpm exec` / `pnpm run`，确认哈希不变。需要新增、移除或升级依赖时重新生成锁文件；冻结安装不承担版本更新。
 
 Python 最低版本为 3.12；依赖声明更新后用 `uv lock --upgrade` 生成 `uv.lock`，日常用 `uv sync --locked` 安装。Zod 4 原生 `z.toJSONSchema` 是 JSON Schema 生成入口，运行 `pnpm gen:schema` 并提交生成物。
+
+仓库 Python 锁文件统一使用官方 PyPI，避免将本机镜像写入可分发锁文件。生成锁时使用 `uv lock --upgrade --no-config --default-index https://pypi.org/simple`；日常安装使用 `uv sync --locked --no-config --default-index https://pypi.org/simple`，运行验证同样传入 `--no-config --default-index https://pypi.org/simple`。这些参数仅覆盖当前命令，不修改用户配置。
