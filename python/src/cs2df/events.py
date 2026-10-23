@@ -246,20 +246,39 @@ def build_kills(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
             "killerPosition": _pos_nullable(r, "attacker_X", "attacker_Y", "attacker_Z"),
             "victimPosition": _pos(r, "user_X", "user_Y", "user_Z"),
         })
-    _annotate_trades(out)
+    _annotate_trades(out, players, trade_window_ticks=6 * max(int(raw.get("tickrate") or 64), 1))
     return out
 
 
-def _annotate_trades(kills: list[dict], trade_window_ticks: int = 384) -> None:
-    """Mark tradeKill / tradeDeath within a rolling 6-second window (384 ticks at 64hz)."""
+def _annotate_trades(kills: list[dict], players: PlayerDirectory,
+                     trade_window_ticks: int = 384) -> None:
+    """Sort events and mark the nearest same-round enemy kill traded within the window.
+
+    Sorting is stable: same-tick events retain their source order. A trade
+    recovers one teammate death, even if the opponent killed several teammates.
+    """
+    kills.sort(key=lambda kill: (kill["roundNumber"], kill["tick"]))
+    for kill in kills:
+        kill["tradeKill"] = False
+        kill["tradeDeath"] = False
+
+    def enemy_kill(kill: dict) -> bool:
+        return (kill["killerIndex"] is not None
+                and players.team_of_index(kill["killerIndex"])
+                != players.team_of_index(kill["victimIndex"]))
+
     for i, kill in enumerate(kills):
-        if kill["killerIndex"] is None:
+        if not enemy_kill(kill):
             continue
-        for j in range(i - 1, max(i - 20, -1), -1):
+        for j in range(i - 1, -1, -1):
             prev = kills[j]
-            if kill["tick"] - prev["tick"] > trade_window_ticks:
+            delta = kill["tick"] - prev["tick"]
+            if prev["roundNumber"] != kill["roundNumber"] or delta > trade_window_ticks:
                 break
-            if prev["killerIndex"] == kill["victimIndex"]:
+            if (delta >= 0 and enemy_kill(prev)
+                    and prev["killerIndex"] == kill["victimIndex"]
+                    and players.team_of_index(kill["killerIndex"])
+                    == players.team_of_index(prev["victimIndex"])):
                 kills[i]["tradeKill"] = True
                 kills[j]["tradeDeath"] = True
                 break
