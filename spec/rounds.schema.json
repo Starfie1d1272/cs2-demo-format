@@ -1,112 +1,113 @@
 {
-  "$ref": "#/definitions/rounds",
-  "definitions": {
-    "rounds": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "roundNumber": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "startTick": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "freezeEndTick": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "endTick": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "teamASide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
-          },
-          "teamBSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
-          },
-          "teamAScoreBefore": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "teamBScoreBefore": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "teamAEconomy": {
-            "type": "string",
-            "enum": [
-              "pistol",
-              "eco",
-              "semi",
-              "force",
-              "full"
-            ]
-          },
-          "teamBEconomy": {
-            "type": "string",
-            "enum": [
-              "pistol",
-              "eco",
-              "semi",
-              "force",
-              "full"
-            ]
-          },
-          "winnerTeamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          },
-          "winnerSide": {
-            "type": "string",
-            "enum": [
-              "t",
-              "ct"
-            ]
-          },
-          "endReason": {
-            "type": "string",
-            "enum": [
-              "t_win",
-              "ct_win",
-              "target_bombed",
-              "bomb_defused",
-              "time_ran_out"
-            ]
-          }
-        },
-        "required": [
-          "roundNumber",
-          "startTick",
-          "freezeEndTick",
-          "endTick",
-          "teamASide",
-          "teamBSide",
-          "teamAScoreBefore",
-          "teamBScoreBefore",
-          "teamAEconomy",
-          "teamBEconomy",
-          "winnerTeamKey",
-          "winnerSide",
-          "endReason"
-        ],
-        "additionalProperties": false
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "roundNumber": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "startTick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "freezeEndTick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "endTick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "teamASide": {
+        "type": "string",
+        "enum": [
+          "t",
+          "ct"
+        ]
+      },
+      "teamBSide": {
+        "type": "string",
+        "enum": [
+          "t",
+          "ct"
+        ]
+      },
+      "teamAScoreBefore": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "teamBScoreBefore": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "teamAEconomy": {
+        "type": "string",
+        "enum": [
+          "pistol",
+          "eco",
+          "semi",
+          "force",
+          "full"
+        ]
+      },
+      "teamBEconomy": {
+        "type": "string",
+        "enum": [
+          "pistol",
+          "eco",
+          "semi",
+          "force",
+          "full"
+        ]
+      },
+      "winnerTeamKey": {
+        "type": "string",
+        "enum": [
+          "teamA",
+          "teamB"
+        ]
+      },
+      "winnerSide": {
+        "type": "string",
+        "enum": [
+          "t",
+          "ct"
+        ]
+      },
+      "endReason": {
+        "type": "string",
+        "enum": [
+          "t_win",
+          "ct_win",
+          "target_bombed",
+          "bomb_defused",
+          "time_ran_out"
+        ]
       }
-    }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "required": [
+      "roundNumber",
+      "startTick",
+      "freezeEndTick",
+      "endTick",
+      "teamASide",
+      "teamBSide",
+      "teamAScoreBefore",
+      "teamBScoreBefore",
+      "teamAEconomy",
+      "teamBEconomy",
+      "winnerTeamKey",
+      "winnerSide",
+      "endReason"
+    ],
+    "additionalProperties": false
+  }
 }

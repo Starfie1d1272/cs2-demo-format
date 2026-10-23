@@ -70,3 +70,9 @@ playerStats.adr = damageHealth / rounds
 - `fixtures/de_ancient-2026-05-17/` is a legacy v1 fixture, skipped by validator.
 - `fixtures/v3-mid/` is the v3 golden fixture (de_anubis, 21 rounds, research profile).
 - Do not commit `.omc/`, `.DS_Store`, `__pycache__/`, or `node_modules/`.
+
+## 依赖安装与更新
+
+依赖维护遵循 [`docs/dependency-maintenance.md`](docs/dependency-maintenance.md)。使用 manifest 指定的 pnpm，日常冻结安装，版本更新时自动生成锁文件；不要手改锁文件或恢复旧文件掩盖依赖变化。
+
+云环境中如存在 `/workspace/.onboarding/activate.sh`，每个 shell 执行仓库命令前先 source 该文件，以选择可写缓存和 manifest 对应的包管理器。

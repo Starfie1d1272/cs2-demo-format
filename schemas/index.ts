@@ -28,8 +28,7 @@
  * running prefix sum. Non-delta arrays store plain per-frame values.
  */
 
-// Keep the v3 contract and JSON Schema output stable with Zod 4 installed.
-import { z } from "zod/v3";
+import { z } from "zod";
 
 // ── Shared primitives ──────────────────────────────────────────────────────────
 

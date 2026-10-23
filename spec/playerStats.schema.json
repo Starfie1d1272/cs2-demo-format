@@ -1,253 +1,290 @@
 {
-  "$ref": "#/definitions/playerStats",
-  "definitions": {
-    "playerStats": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "playerIndex": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "rounds": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "kills": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "deaths": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "assists": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "damageHealth": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "damageArmor": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "adr": {
-            "type": "number",
-            "minimum": 0
-          },
-          "utilityDamage": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "averageUtilityDamagePerRound": {
-            "type": "number",
-            "minimum": 0
-          },
-          "headshotCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "firstKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "firstDeathCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "tradeKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "tradeDeathCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "kast": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "oneKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "twoKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "threeKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "fourKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "fiveKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsOneCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsOneWonCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsOneLostCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsTwoCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsTwoWonCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsTwoLostCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsThreeCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsThreeWonCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsThreeLostCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsFourCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsFourWonCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsFourLostCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsFiveCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsFiveWonCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "vsFiveLostCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "bombPlantCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "bombDefuseCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "wallbangKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "noScopeKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "collateralKillCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "kastRounds": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "flashAssistCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "enemyFlashDurationSeconds": {
-            "type": "number",
-            "minimum": 0
-          },
-          "teamFlashDurationSeconds": {
-            "type": "number",
-            "minimum": 0
-          },
-          "combatDeathCount": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "bombDeathCount": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "playerIndex",
-          "rounds",
-          "kills",
-          "deaths",
-          "assists",
-          "damageHealth",
-          "damageArmor",
-          "adr",
-          "utilityDamage",
-          "averageUtilityDamagePerRound",
-          "headshotCount",
-          "firstKillCount",
-          "firstDeathCount",
-          "tradeKillCount",
-          "tradeDeathCount",
-          "kast",
-          "oneKillCount",
-          "twoKillCount",
-          "threeKillCount",
-          "fourKillCount",
-          "fiveKillCount",
-          "vsOneCount",
-          "vsOneWonCount",
-          "vsOneLostCount",
-          "vsTwoCount",
-          "vsTwoWonCount",
-          "vsTwoLostCount",
-          "vsThreeCount",
-          "vsThreeWonCount",
-          "vsThreeLostCount",
-          "vsFourCount",
-          "vsFourWonCount",
-          "vsFourLostCount",
-          "vsFiveCount",
-          "vsFiveWonCount",
-          "vsFiveLostCount",
-          "bombPlantCount",
-          "bombDefuseCount",
-          "wallbangKillCount",
-          "noScopeKillCount",
-          "collateralKillCount",
-          "kastRounds",
-          "flashAssistCount",
-          "enemyFlashDurationSeconds",
-          "teamFlashDurationSeconds",
-          "combatDeathCount",
-          "bombDeathCount"
-        ],
-        "additionalProperties": false
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "playerIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "rounds": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "kills": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "deaths": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "assists": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "damageHealth": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "damageArmor": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "adr": {
+        "type": "number",
+        "minimum": 0
+      },
+      "utilityDamage": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "averageUtilityDamagePerRound": {
+        "type": "number",
+        "minimum": 0
+      },
+      "headshotCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "firstKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "firstDeathCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "tradeKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "tradeDeathCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "kast": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 100
+      },
+      "oneKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "twoKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "threeKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "fourKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "fiveKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsOneCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsOneWonCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsOneLostCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsTwoCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsTwoWonCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsTwoLostCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsThreeCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsThreeWonCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsThreeLostCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsFourCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsFourWonCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsFourLostCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsFiveCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsFiveWonCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "vsFiveLostCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "bombPlantCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "bombDefuseCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "wallbangKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "noScopeKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "collateralKillCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "kastRounds": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "flashAssistCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "enemyFlashDurationSeconds": {
+        "type": "number",
+        "minimum": 0
+      },
+      "teamFlashDurationSeconds": {
+        "type": "number",
+        "minimum": 0
+      },
+      "combatDeathCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "bombDeathCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
       }
-    }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "required": [
+      "playerIndex",
+      "rounds",
+      "kills",
+      "deaths",
+      "assists",
+      "damageHealth",
+      "damageArmor",
+      "adr",
+      "utilityDamage",
+      "averageUtilityDamagePerRound",
+      "headshotCount",
+      "firstKillCount",
+      "firstDeathCount",
+      "tradeKillCount",
+      "tradeDeathCount",
+      "kast",
+      "oneKillCount",
+      "twoKillCount",
+      "threeKillCount",
+      "fourKillCount",
+      "fiveKillCount",
+      "vsOneCount",
+      "vsOneWonCount",
+      "vsOneLostCount",
+      "vsTwoCount",
+      "vsTwoWonCount",
+      "vsTwoLostCount",
+      "vsThreeCount",
+      "vsThreeWonCount",
+      "vsThreeLostCount",
+      "vsFourCount",
+      "vsFourWonCount",
+      "vsFourLostCount",
+      "vsFiveCount",
+      "vsFiveWonCount",
+      "vsFiveLostCount",
+      "bombPlantCount",
+      "bombDefuseCount",
+      "wallbangKillCount",
+      "noScopeKillCount",
+      "collateralKillCount",
+      "kastRounds",
+      "flashAssistCount",
+      "enemyFlashDurationSeconds",
+      "teamFlashDurationSeconds",
+      "combatDeathCount",
+      "bombDeathCount"
+    ],
+    "additionalProperties": false
+  }
 }

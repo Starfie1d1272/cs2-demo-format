@@ -1,52 +1,50 @@
 {
-  "$ref": "#/definitions/clutches",
-  "definitions": {
-    "clutches": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "roundNumber": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "tick": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "clutcherIndex": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "opponentCount": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 5
-          },
-          "won": {
-            "type": "boolean"
-          },
-          "survived": {
-            "type": "boolean"
-          },
-          "killCount": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 5
-          }
-        },
-        "required": [
-          "roundNumber",
-          "tick",
-          "clutcherIndex",
-          "opponentCount",
-          "won",
-          "survived",
-          "killCount"
-        ],
-        "additionalProperties": false
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "roundNumber": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "tick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "clutcherIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "opponentCount": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5
+      },
+      "won": {
+        "type": "boolean"
+      },
+      "survived": {
+        "type": "boolean"
+      },
+      "killCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 5
       }
-    }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "required": [
+      "roundNumber",
+      "tick",
+      "clutcherIndex",
+      "opponentCount",
+      "won",
+      "survived",
+      "killCount"
+    ],
+    "additionalProperties": false
+  }
 }

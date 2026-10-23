@@ -72,7 +72,7 @@ for (const demo of fixtureDirs) {
     for (const [key, filenameValue] of Object.entries(filesMap)) {
       const filename = String(filenameValue);
       const filePath = join(demoDir, filename);
-      const schema = (SCHEMAS_BY_KEY as Record<string, { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: { issues: Array<{ path: Array<string | number>; message: string }> } } }>)[key];
+      const schema = (SCHEMAS_BY_KEY as Record<string, { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: { issues: Array<{ path: Array<PropertyKey>; message: string }> } } }>)[key];
 
       if (!existsSync(filePath)) {
         const level = REQUIRED_KEYS.has(key) ? "✗" : "-";
@@ -117,9 +117,9 @@ for (const demo of fixtureDirs) {
 console.log(`\n${errors === 0 ? "✅" : "❌"} ${totalFiles} files checked, ${errors} error(s), ${skippedLegacy} legacy fixture(s) skipped`);
 if (errors > 0) process.exit(1);
 
-function reportZodError(filename: string, issues: Array<{ path: Array<string | number>; message: string }>) {
+function reportZodError(filename: string, issues: Array<{ path: Array<PropertyKey>; message: string }>) {
   for (const issue of issues.slice(0, 20)) {
-    const path = issue.path.length ? issue.path.join(" → ") : "(root)";
+    const path = issue.path.length ? issue.path.map(String).join(" → ") : "(root)";
     console.error(`  ✗ ${filename}: [${path}] ${issue.message}`);
   }
   if (issues.length > 20) {

@@ -1,35 +1,30 @@
 {
-  "$ref": "#/definitions/players",
-  "definitions": {
-    "players": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "steamId64": {
-            "type": "string",
-            "pattern": "^\\d{17}$"
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "teamKey": {
-            "type": "string",
-            "enum": [
-              "teamA",
-              "teamB"
-            ]
-          }
-        },
-        "required": [
-          "steamId64",
-          "name",
-          "teamKey"
-        ],
-        "additionalProperties": false
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "steamId64": {
+        "type": "string",
+        "pattern": "^\\d{17}$"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1
+      },
+      "teamKey": {
+        "type": "string",
+        "enum": [
+          "teamA",
+          "teamB"
+        ]
       }
-    }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "required": [
+      "steamId64",
+      "name",
+      "teamKey"
+    ],
+    "additionalProperties": false
+  }
 }

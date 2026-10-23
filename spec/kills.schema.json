@@ -1,132 +1,118 @@
 {
-  "$ref": "#/definitions/kills",
-  "definitions": {
-    "kills": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "roundNumber": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "roundNumber": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "tick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "killerIndex": {
+        "anyOf": [
+          {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
-          "tick": {
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "victimIndex": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "assisterIndex": {
+        "anyOf": [
+          {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
-          "killerIndex": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "victimIndex": {
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "flashAssisterIndex": {
+        "anyOf": [
+          {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
-          "assisterIndex": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "flashAssisterIndex": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 0
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "weapon": {
-            "type": "string",
-            "minLength": 1
-          },
-          "killerActiveWeapon": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "victimActiveWeapon": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "headshot": {
-            "type": "boolean"
-          },
-          "flashAssist": {
-            "type": "boolean"
-          },
-          "tradeKill": {
-            "type": "boolean"
-          },
-          "tradeDeath": {
-            "type": "boolean"
-          },
-          "throughSmoke": {
-            "type": "boolean"
-          },
-          "noScope": {
-            "type": "boolean"
-          },
-          "penetratedObjects": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "killerPosition": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "x": {
-                    "type": "integer"
-                  },
-                  "y": {
-                    "type": "integer"
-                  },
-                  "z": {
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "x",
-                  "y",
-                  "z"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "victimPosition": {
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "weapon": {
+        "type": "string",
+        "minLength": 1
+      },
+      "killerActiveWeapon": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "victimActiveWeapon": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "headshot": {
+        "type": "boolean"
+      },
+      "flashAssist": {
+        "type": "boolean"
+      },
+      "tradeKill": {
+        "type": "boolean"
+      },
+      "tradeDeath": {
+        "type": "boolean"
+      },
+      "throughSmoke": {
+        "type": "boolean"
+      },
+      "noScope": {
+        "type": "boolean"
+      },
+      "penetratedObjects": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "killerPosition": {
+        "anyOf": [
+          {
             "type": "object",
             "properties": {
               "x": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               "y": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               },
               "z": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -135,31 +121,59 @@
               "z"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "victimPosition": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "y": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "z": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
           }
         },
         "required": [
-          "roundNumber",
-          "tick",
-          "killerIndex",
-          "victimIndex",
-          "assisterIndex",
-          "flashAssisterIndex",
-          "weapon",
-          "killerActiveWeapon",
-          "victimActiveWeapon",
-          "headshot",
-          "flashAssist",
-          "tradeKill",
-          "tradeDeath",
-          "throughSmoke",
-          "noScope",
-          "penetratedObjects",
-          "killerPosition",
-          "victimPosition"
+          "x",
+          "y",
+          "z"
         ],
         "additionalProperties": false
       }
-    }
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "required": [
+      "roundNumber",
+      "tick",
+      "killerIndex",
+      "victimIndex",
+      "assisterIndex",
+      "flashAssisterIndex",
+      "weapon",
+      "killerActiveWeapon",
+      "victimActiveWeapon",
+      "headshot",
+      "flashAssist",
+      "tradeKill",
+      "tradeDeath",
+      "throughSmoke",
+      "noScope",
+      "penetratedObjects",
+      "killerPosition",
+      "victimPosition"
+    ],
+    "additionalProperties": false
+  }
 }
