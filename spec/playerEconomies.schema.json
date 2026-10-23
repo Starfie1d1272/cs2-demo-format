@@ -93,8 +93,7 @@
       "hasDefuseKit",
       "primaryWeapon",
       "secondaryWeapon",
-      "grenadeCount",
-      "grenades"
+      "grenadeCount"
     ],
     "additionalProperties": false
   }

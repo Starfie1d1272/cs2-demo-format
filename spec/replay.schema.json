@@ -218,8 +218,7 @@
                 "weapon",
                 "place",
                 "flash",
-                "flags",
-                "grenades"
+                "flags"
               ],
               "additionalProperties": false
             }

@@ -25,6 +25,8 @@ const entries: Array<[string, z.ZodType]> = [
 for (const [key, schema] of entries) {
   const jsonSchema = z.toJSONSchema(schema, {
     target: "draft-7",
+    // The wire contract validates input before Zod fills default values.
+    io: "input",
   });
 
   const outPath = join(specDir, `${key}.schema.json`);
