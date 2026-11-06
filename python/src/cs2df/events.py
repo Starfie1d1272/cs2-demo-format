@@ -16,8 +16,12 @@ import re
 from collections import defaultdict
 
 from .enums import (
-    normalize_hitgroup, classify_inventory, normalize_weapon_name,
-    bomb_site_from_place, _BOMB_TYPE_MAP, _GRENADE_TYPE_ENUM,
+    normalize_hitgroup,
+    classify_inventory,
+    normalize_weapon_name,
+    bomb_site_from_place,
+    _BOMB_TYPE_MAP,
+    _GRENADE_TYPE_ENUM,
 )
 from .rounds import _RoundModel, _event_steamid
 
@@ -25,6 +29,7 @@ _STEAMID_RE = re.compile(r"^\d{17}$")
 
 
 # ── helper primitives ─────────────────────────────────────────────────────────
+
 
 def _safe_float(val, default: float = 0.0) -> float:
     if val is None:
@@ -84,7 +89,11 @@ def _pos_nullable(row: dict, xk="X", yk="Y", zk="Z") -> dict | None:
     zv = _safe_float_nullable(_raw(row, zk))
     if xv is None and yv is None and zv is None:
         return None
-    return {"x": int(round(xv or 0.0)), "y": int(round(yv or 0.0)), "z": int(round(zv or 0.0))}
+    return {
+        "x": int(round(xv or 0.0)),
+        "y": int(round(yv or 0.0)),
+        "z": int(round(zv or 0.0)),
+    }
 
 
 def _b(val) -> bool:
@@ -122,7 +131,12 @@ def _active_event_round_number(round_model: _RoundModel, row: dict) -> int | Non
     tick = int(row.get("tick") or 0)
     window = round_model.window_for_round(n)
     event_end = round_model.event_end_tick(n)
-    if window is None or event_end is None or tick < window.freeze_end_tick or tick > event_end:
+    if (
+        window is None
+        or event_end is None
+        or tick < window.freeze_end_tick
+        or tick > event_end
+    ):
         return None
     return n
 
@@ -132,7 +146,9 @@ class PlayerDirectory:
 
     def __init__(self, rows: list[dict]):
         self.rows = rows
-        self.index_by_sid: dict[str, int] = {r["steamId64"]: i for i, r in enumerate(rows)}
+        self.index_by_sid: dict[str, int] = {
+            r["steamId64"]: i for i, r in enumerate(rows)
+        }
         self.team_by_sid: dict[str, str] = {r["steamId64"]: r["teamKey"] for r in rows}
 
     def idx(self, sid: str | None) -> int | None:
@@ -150,6 +166,7 @@ class PlayerDirectory:
 
 
 # ── players / match ───────────────────────────────────────────────────────────
+
 
 def build_players(raw: dict) -> PlayerDirectory:
     team_num_to_key = {2: "teamA", 3: "teamB"}
@@ -169,7 +186,9 @@ def build_players(raw: dict) -> PlayerDirectory:
         team_key = team_num_to_key.get(int(tn))
         if not team_key:
             continue
-        out.append({"steamId64": sid, "name": str(r.get("name") or sid), "teamKey": team_key})
+        out.append(
+            {"steamId64": sid, "name": str(r.get("name") or sid), "teamKey": team_key}
+        )
     # Stable, deterministic order: teamA before teamB, then by steamId64.
     out.sort(key=lambda p: (p["teamKey"], p["steamId64"]))
     return PlayerDirectory(out)
@@ -179,8 +198,12 @@ def build_match(raw: dict, rounds: list[dict]) -> dict:
     hdr = raw.get("header", {})
     team_a_score = sum(1 for r in rounds if r["winnerTeamKey"] == "teamA")
     team_b_score = sum(1 for r in rounds if r["winnerTeamKey"] == "teamB")
-    team_a_name = (raw.get("team_a_name") or str(hdr.get("team_name_t") or "")).strip() or None
-    team_b_name = (raw.get("team_b_name") or str(hdr.get("team_name_ct") or "")).strip() or None
+    team_a_name = (
+        raw.get("team_a_name") or str(hdr.get("team_name_t") or "")
+    ).strip() or None
+    team_b_name = (
+        raw.get("team_b_name") or str(hdr.get("team_name_ct") or "")
+    ).strip() or None
 
     duration = _safe_float(hdr.get("playback_time"), default=0.0)
     if not duration:
@@ -203,7 +226,10 @@ def build_match(raw: dict, rounds: list[dict]) -> dict:
 
 # ── kills ─────────────────────────────────────────────────────────────────────
 
-def build_kills(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -> list[dict]:
+
+def build_kills(
+    raw: dict, players: PlayerDirectory, round_model: _RoundModel
+) -> list[dict]:
     out = []
     for r in raw.get("deaths", []):
         n = _active_event_round_number(round_model, r)
@@ -214,7 +240,9 @@ def build_kills(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
         if victim_idx is None:
             continue
         # victim must resolve to a formal side this round
-        if not _is_valid_side(round_model.side_map.get((n, players.team(victim_sid)), "unknown")):
+        if not _is_valid_side(
+            round_model.side_map.get((n, players.team(victim_sid)), "unknown")
+        ):
             continue
         weapon = str(r.get("weapon") or "")
         if not weapon:
@@ -226,32 +254,45 @@ def build_kills(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
         flash_assist = _b(r.get("assistedflash"))
         flash_assister_idx = assist_idx if flash_assist else None
 
-        out.append({
-            "roundNumber": n,
-            "tick": int(r.get("tick") or 0),
-            "killerIndex": killer_idx,
-            "victimIndex": victim_idx,
-            "assisterIndex": assist_idx,
-            "flashAssisterIndex": flash_assister_idx,
-            "weapon": weapon,
-            "killerActiveWeapon": normalize_weapon_name(r.get("attacker_active_weapon")),
-            "victimActiveWeapon": normalize_weapon_name(r.get("user_active_weapon")),
-            "headshot": _b(r.get("headshot")),
-            "flashAssist": flash_assist and flash_assister_idx is not None,
-            "tradeKill": False,
-            "tradeDeath": False,
-            "throughSmoke": _b(r.get("thrusmoke")),
-            "noScope": _b(r.get("noscope")),
-            "penetratedObjects": int(r.get("penetrated_objects") or r.get("penetrated") or 0),
-            "killerPosition": _pos_nullable(r, "attacker_X", "attacker_Y", "attacker_Z"),
-            "victimPosition": _pos(r, "user_X", "user_Y", "user_Z"),
-        })
-    _annotate_trades(out, players, trade_window_ticks=6 * max(int(raw.get("tickrate") or 64), 1))
+        out.append(
+            {
+                "roundNumber": n,
+                "tick": int(r.get("tick") or 0),
+                "killerIndex": killer_idx,
+                "victimIndex": victim_idx,
+                "assisterIndex": assist_idx,
+                "flashAssisterIndex": flash_assister_idx,
+                "weapon": weapon,
+                "killerActiveWeapon": normalize_weapon_name(
+                    r.get("attacker_active_weapon")
+                ),
+                "victimActiveWeapon": normalize_weapon_name(
+                    r.get("user_active_weapon")
+                ),
+                "headshot": _b(r.get("headshot")),
+                "flashAssist": flash_assist and flash_assister_idx is not None,
+                "tradeKill": False,
+                "tradeDeath": False,
+                "throughSmoke": _b(r.get("thrusmoke")),
+                "noScope": _b(r.get("noscope")),
+                "penetratedObjects": int(
+                    r.get("penetrated_objects") or r.get("penetrated") or 0
+                ),
+                "killerPosition": _pos_nullable(
+                    r, "attacker_X", "attacker_Y", "attacker_Z"
+                ),
+                "victimPosition": _pos(r, "user_X", "user_Y", "user_Z"),
+            }
+        )
+    _annotate_trades(
+        out, players, trade_window_ticks=6 * max(int(raw.get("tickrate") or 64), 1)
+    )
     return out
 
 
-def _annotate_trades(kills: list[dict], players: PlayerDirectory,
-                     trade_window_ticks: int = 384) -> None:
+def _annotate_trades(
+    kills: list[dict], players: PlayerDirectory, trade_window_ticks: int = 384
+) -> None:
     """Sort events and mark the nearest same-round enemy kill traded within the window.
 
     Sorting is stable: same-tick events retain their source order. A trade
@@ -263,9 +304,9 @@ def _annotate_trades(kills: list[dict], players: PlayerDirectory,
         kill["tradeDeath"] = False
 
     def enemy_kill(kill: dict) -> bool:
-        return (kill["killerIndex"] is not None
-                and players.team_of_index(kill["killerIndex"])
-                != players.team_of_index(kill["victimIndex"]))
+        return kill["killerIndex"] is not None and players.team_of_index(
+            kill["killerIndex"]
+        ) != players.team_of_index(kill["victimIndex"])
 
     for i, kill in enumerate(kills):
         if not enemy_kill(kill):
@@ -275,10 +316,13 @@ def _annotate_trades(kills: list[dict], players: PlayerDirectory,
             delta = kill["tick"] - prev["tick"]
             if prev["roundNumber"] != kill["roundNumber"] or delta > trade_window_ticks:
                 break
-            if (delta >= 0 and enemy_kill(prev)
-                    and prev["killerIndex"] == kill["victimIndex"]
-                    and players.team_of_index(kill["killerIndex"])
-                    == players.team_of_index(prev["victimIndex"])):
+            if (
+                delta >= 0
+                and enemy_kill(prev)
+                and prev["killerIndex"] == kill["victimIndex"]
+                and players.team_of_index(kill["killerIndex"])
+                == players.team_of_index(prev["victimIndex"])
+            ):
                 kills[i]["tradeKill"] = True
                 kills[j]["tradeDeath"] = True
                 break
@@ -286,7 +330,10 @@ def _annotate_trades(kills: list[dict], players: PlayerDirectory,
 
 # ── damages ───────────────────────────────────────────────────────────────────
 
-def build_damages(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -> list[dict]:
+
+def build_damages(
+    raw: dict, players: PlayerDirectory, round_model: _RoundModel
+) -> list[dict]:
     out: list[dict] = []
     remaining_health: dict[tuple[int, int], int] = defaultdict(lambda: 100)
 
@@ -298,7 +345,9 @@ def build_damages(raw: dict, players: PlayerDirectory, round_model: _RoundModel)
         vic_idx = players.idx(vic_sid)
         if vic_idx is None or not _is_valid_steamid(vic_sid):
             continue
-        if not _is_valid_side(round_model.side_map.get((n, players.team(vic_sid)), "unknown")):
+        if not _is_valid_side(
+            round_model.side_map.get((n, players.team(vic_sid)), "unknown")
+        ):
             continue
         weapon = str(r.get("weapon") or "")
         if not weapon:
@@ -313,28 +362,37 @@ def build_damages(raw: dict, players: PlayerDirectory, round_model: _RoundModel)
         remaining_health[health_key] = health_before - health_dmg
         armor_after = min(int(r.get("armor") or 0), 100)
 
-        out.append({
-            "roundNumber": n,
-            "tick": int(r.get("tick") or 0),
-            "attackerIndex": atk_idx,
-            "victimIndex": vic_idx,
-            "weapon": weapon,
-            "hitgroup": normalize_hitgroup(r.get("hitgroup")),
-            "healthDamage": health_dmg,
-            "healthDamageRaw": raw_dmg,
-            "armorDamage": int(r.get("dmg_armor") or 0),
-            "victimHealthBefore": health_before,
-            "victimArmorAfter": armor_after,
-            "attackerPosition": _pos_nullable(r, "attacker_X", "attacker_Y", "attacker_Z"),
-            "victimPosition": _pos(r, "user_X", "user_Y", "user_Z"),
-        })
+        out.append(
+            {
+                "roundNumber": n,
+                "tick": int(r.get("tick") or 0),
+                "attackerIndex": atk_idx,
+                "victimIndex": vic_idx,
+                "weapon": weapon,
+                "hitgroup": normalize_hitgroup(r.get("hitgroup")),
+                "healthDamage": health_dmg,
+                "healthDamageRaw": raw_dmg,
+                "armorDamage": int(r.get("dmg_armor") or 0),
+                "victimHealthBefore": health_before,
+                "victimArmorAfter": armor_after,
+                "attackerPosition": _pos_nullable(
+                    r, "attacker_X", "attacker_Y", "attacker_Z"
+                ),
+                "victimPosition": _pos(r, "user_X", "user_Y", "user_Z"),
+            }
+        )
     return out
 
 
 # ── blinds ────────────────────────────────────────────────────────────────────
 
-def build_blinds(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
-                 flash_lookup: dict | None = None) -> list[dict]:
+
+def build_blinds(
+    raw: dict,
+    players: PlayerDirectory,
+    round_model: _RoundModel,
+    flash_lookup: dict | None = None,
+) -> list[dict]:
     flash_lookup = flash_lookup or {}
     out = []
     for r in raw.get("blinds", []):
@@ -347,27 +405,38 @@ def build_blinds(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
         flashed_idx = players.idx(flashed_sid)
         if flasher_idx is None or flashed_idx is None:
             continue
-        if not _is_valid_side(round_model.side_map.get((n, players.team(flasher_sid)), "unknown")):
+        if not _is_valid_side(
+            round_model.side_map.get((n, players.team(flasher_sid)), "unknown")
+        ):
             continue
-        if not _is_valid_side(round_model.side_map.get((n, players.team(flashed_sid)), "unknown")):
+        if not _is_valid_side(
+            round_model.side_map.get((n, players.team(flashed_sid)), "unknown")
+        ):
             continue
 
-        dur = min(_safe_float(r.get("blind_duration") or r.get("duration"), default=0.0), 6.0)
+        dur = min(
+            _safe_float(r.get("blind_duration") or r.get("duration"), default=0.0), 6.0
+        )
         tick = int(r.get("tick") or 0)
-        out.append({
-            "roundNumber": n,
-            "tick": tick,
-            "flashId": flash_lookup.get((n, tick)),
-            "flasherIndex": flasher_idx,
-            "flashedIndex": flashed_idx,
-            "durationSeconds": round(dur, 3),
-        })
+        out.append(
+            {
+                "roundNumber": n,
+                "tick": tick,
+                "flashId": flash_lookup.get((n, tick)),
+                "flasherIndex": flasher_idx,
+                "flashedIndex": flashed_idx,
+                "durationSeconds": round(dur, 3),
+            }
+        )
     return out
 
 
 # ── bombs ─────────────────────────────────────────────────────────────────────
 
-def build_bombs(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -> list[dict]:
+
+def build_bombs(
+    raw: dict, players: PlayerDirectory, round_model: _RoundModel
+) -> list[dict]:
     out = []
     # A/B from the actor's last_place_name at plant; reused for defuse/explode.
     round_site: dict[int, str] = {}
@@ -399,27 +468,39 @@ def build_bombs(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
             tick = int(r.get("tick") or 0)
             window = round_model.window_for_round(n)
             event_end = round_model.event_end_tick(n)
-            if window is None or event_end is None or tick < window.freeze_end_tick or tick > event_end:
+            if (
+                window is None
+                or event_end is None
+                or tick < window.freeze_end_tick
+                or tick > event_end
+            ):
                 continue
-            actor_sid = _sid(r.get("user_steamid") or r.get("steamid") or r.get("userid"))
+            actor_sid = _sid(
+                r.get("user_steamid") or r.get("steamid") or r.get("userid")
+            )
             site = bomb_site_from_place(r.get("user_last_place_name"))
             if site is None and v3_type in _ROUND_SITE_TYPES:
                 site = round_site.get(n)
-            out.append({
-                "roundNumber": n,
-                "tick": tick,
-                "type": v3_type,
-                "site": site,
-                "actorIndex": players.idx(actor_sid),
-                "position": _pos(r, "user_X", "user_Y", "user_Z"),
-            })
+            out.append(
+                {
+                    "roundNumber": n,
+                    "tick": tick,
+                    "type": v3_type,
+                    "site": site,
+                    "actorIndex": players.idx(actor_sid),
+                    "position": _pos(r, "user_X", "user_Y", "user_Z"),
+                }
+            )
     out.sort(key=lambda x: (x["roundNumber"], x["tick"]))
     return out
 
 
 # ── grenades ─────────────────────────────────────────────────────────────────
 
-def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -> list[dict]:
+
+def build_grenades(
+    raw: dict, players: PlayerDirectory, round_model: _RoundModel
+) -> list[dict]:
     throws: list[dict] = []
     for r in raw.get("grenade_throws", []):
         tick = int(r.get("tick") or 0)
@@ -432,21 +513,28 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
         destroy_tick = int(r.get("destroy_tick") or 0)
         eid = r.get("grenade_entity_id")
         gid = f"{int(eid)}-{tick}" if eid is not None else None
-        throws.append({
-            "rn": n,
-            "tick": tick,
-            "destroy_tick": destroy_tick if destroy_tick > 0 else None,
-            "gtype": gtype,
-            "sid": _event_steamid(r),
-            "eid": gid,
-            "pos": _pos(r),
-        })
+        throws.append(
+            {
+                "rn": n,
+                "tick": tick,
+                "destroy_tick": destroy_tick if destroy_tick > 0 else None,
+                "gtype": gtype,
+                "sid": _event_steamid(r),
+                "eid": gid,
+                "pos": _pos(r),
+            }
+        )
     throws.sort(key=lambda t: t["tick"])
 
-    def _match_throw(round_num: int, gtype: str, effect_tick: int, thrower_sid: str | None) -> dict | None:
+    def _match_throw(
+        round_num: int, gtype: str, effect_tick: int, thrower_sid: str | None
+    ) -> dict | None:
         pool = [
-            t for t in throws
-            if t["rn"] == round_num and t["gtype"] == gtype and t["tick"] <= effect_tick
+            t
+            for t in throws
+            if t["rn"] == round_num
+            and t["gtype"] == gtype
+            and t["tick"] <= effect_tick
             and (thrower_sid is None or t["sid"] == thrower_sid)
         ]
         return max(pool, key=lambda t: t["tick"]) if pool else None
@@ -459,7 +547,12 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
         tick = int(r.get("tick") or 0)
         window = round_model.window_for_round(n)
         event_end = round_model.event_end_tick(n)
-        if window is None or event_end is None or tick < window.freeze_end_tick or tick > event_end:
+        if (
+            window is None
+            or event_end is None
+            or tick < window.freeze_end_tick
+            or tick > event_end
+        ):
             continue
         gtype = str(r.get("_grenade_type") or "")
         if gtype not in _GRENADE_TYPE_ENUM:
@@ -478,32 +571,40 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
             throw_pos = _pos(r)
             throw_tick = tick
             destroy_tick = None
-            grenade_id = f"{detonate_entity_id}-{tick}" if detonate_entity_id is not None else None
+            grenade_id = (
+                f"{detonate_entity_id}-{tick}"
+                if detonate_entity_id is not None
+                else None
+            )
 
         if throw_tick <= 0 or tick <= 0:
             continue
         thrower_idx = players.idx(thrower_sid)
         if thrower_idx is None:
             continue
-        if not _is_valid_side(round_model.side_map.get((n, players.team(thrower_sid)), "unknown")):
+        if not _is_valid_side(
+            round_model.side_map.get((n, players.team(thrower_sid)), "unknown")
+        ):
             continue
         if destroy_tick is not None and (
             destroy_tick < tick or event_end is None or destroy_tick > event_end
         ):
             destroy_tick = None
 
-        out.append({
-            "roundNumber": n,
-            "grenadeId": grenade_id,
-            "throwTick": throw_tick,
-            "effectTick": tick,
-            "destroyTick": destroy_tick,
-            "_entityId": detonate_entity_id,
-            "grenade": gtype,
-            "throwerIndex": thrower_idx,
-            "throwPosition": throw_pos,
-            "effectPosition": _pos(r),
-        })
+        out.append(
+            {
+                "roundNumber": n,
+                "grenadeId": grenade_id,
+                "throwTick": throw_tick,
+                "effectTick": tick,
+                "destroyTick": destroy_tick,
+                "_entityId": detonate_entity_id,
+                "grenade": gtype,
+                "throwerIndex": thrower_idx,
+                "throwPosition": throw_pos,
+                "effectPosition": _pos(r),
+            }
+        )
 
     # molotov burn end: pair with the nearest later inferno_expire in-round.
     expires: list[dict] = []
@@ -562,8 +663,10 @@ def build_grenades(raw: dict, players: PlayerDirectory, round_model: _RoundModel
 
 # ── clutches ──────────────────────────────────────────────────────────────────
 
-def build_clutches(kills: list[dict], rounds: list[dict],
-                   players: PlayerDirectory) -> list[dict]:
+
+def build_clutches(
+    kills: list[dict], rounds: list[dict], players: PlayerDirectory
+) -> list[dict]:
     """Detect 1vN situations: one alive player vs N enemies at some point in the round."""
     out: list[dict] = []
     rounds_by_n = {r["roundNumber"]: r for r in rounds}
@@ -599,18 +702,21 @@ def build_clutches(kills: list[dict], rounds: list[dict],
                     continue
                 clutch_detected.add(idx)
                 remaining_kills = sum(
-                    1 for kk in rnd_kills
+                    1
+                    for kk in rnd_kills
                     if kk["tick"] >= k["tick"] and kk["killerIndex"] == idx
                 )
-                out.append({
-                    "roundNumber": rn,
-                    "tick": k["tick"],
-                    "clutcherIndex": idx,
-                    "opponentCount": len(opp_alive),
-                    "won": rnd["winnerTeamKey"] == team_key,
-                    "survived": idx not in dead,
-                    "killCount": min(remaining_kills, 5),
-                })
+                out.append(
+                    {
+                        "roundNumber": rn,
+                        "tick": k["tick"],
+                        "clutcherIndex": idx,
+                        "opponentCount": len(opp_alive),
+                        "won": rnd["winnerTeamKey"] == team_key,
+                        "survived": idx not in dead,
+                        "killCount": min(remaining_kills, 5),
+                    }
+                )
     return out
 
 
@@ -624,17 +730,23 @@ def _is_pistol_round(round_number: int) -> bool:
     return round_number in (1, 13)
 
 
-def _is_pistol_conversion_round(round_number: int, team_key: str, rounds: list[dict]) -> bool:
+def _is_pistol_conversion_round(
+    round_number: int, team_key: str, rounds: list[dict]
+) -> bool:
     previous_pistol = round_number - 1
     if previous_pistol not in (1, 13):
         return False
     previous_round = next(
-        (row for row in rounds if row.get("roundNumber") == previous_pistol), None)
-    return previous_round is not None and previous_round.get("winnerTeamKey") == team_key
+        (row for row in rounds if row.get("roundNumber") == previous_pistol), None
+    )
+    return (
+        previous_round is not None and previous_round.get("winnerTeamKey") == team_key
+    )
 
 
-def _economy_type(money_spent: int, start_money: int, equipment_value: int,
-                  round_number: int) -> str:
+def _economy_type(
+    money_spent: int, start_money: int, equipment_value: int, round_number: int
+) -> str:
     if _is_pistol_round(round_number):
         return "pistol"
     if equipment_value >= 4000:
@@ -657,9 +769,12 @@ def _team_economy_vote(types: list[str]) -> str:
     return "semi"
 
 
-def build_economies(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
-                    rounds: list[dict]) -> list[dict]:
-    freeze_tick_to_round = {w.freeze_end_tick: w.round_number for w in round_model.windows}
+def build_economies(
+    raw: dict, players: PlayerDirectory, round_model: _RoundModel, rounds: list[dict]
+) -> list[dict]:
+    freeze_tick_to_round = {
+        w.freeze_end_tick: w.round_number for w in round_model.windows
+    }
 
     out = []
     team_round_types: dict[tuple[int, str], list[str]] = {}
@@ -681,23 +796,27 @@ def build_economies(raw: dict, players: PlayerDirectory, round_model: _RoundMode
         equip = int(_safe_float(r.get("current_equip_value"), 0))
         start_money = int(_safe_float(r.get("start_balance"), 0))
         eco_type = _economy_type(spent, start_money, equip, n)
-        primary, secondary, grenade_count, grenades = classify_inventory(r.get("inventory"))
+        primary, secondary, grenade_count, grenades = classify_inventory(
+            r.get("inventory")
+        )
 
-        out.append({
-            "roundNumber": n,
-            "playerIndex": idx,
-            "startMoney": start_money,
-            "moneySpent": spent,
-            "equipmentValue": equip,
-            "type": eco_type,
-            "hasArmor": bool(int(_safe_float(r.get("armor"), 0)) > 0),
-            "hasHelmet": bool(_b(r.get("has_helmet"))),
-            "hasDefuseKit": bool(_b(r.get("has_defuser"))),
-            "primaryWeapon": primary,
-            "secondaryWeapon": secondary,
-            "grenadeCount": grenade_count,
-            "grenades": grenades,
-        })
+        out.append(
+            {
+                "roundNumber": n,
+                "playerIndex": idx,
+                "startMoney": start_money,
+                "moneySpent": spent,
+                "equipmentValue": equip,
+                "type": eco_type,
+                "hasArmor": bool(int(_safe_float(r.get("armor"), 0)) > 0),
+                "hasHelmet": bool(_b(r.get("has_helmet"))),
+                "hasDefuseKit": bool(_b(r.get("has_defuser"))),
+                "primaryWeapon": primary,
+                "secondaryWeapon": secondary,
+                "grenadeCount": grenade_count,
+                "grenades": grenades,
+            }
+        )
         team_round_types.setdefault((n, key), []).append(eco_type)
 
     round_by_number = {r["roundNumber"]: r for r in rounds}
@@ -724,10 +843,17 @@ def build_economies(raw: dict, players: PlayerDirectory, round_model: _RoundMode
 
 # ── player-stats ──────────────────────────────────────────────────────────────
 
-def build_player_stats(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
-                       rounds: list[dict], kills_list: list[dict],
-                       blinds_list: list[dict], damages_list: list[dict],
-                       clutches_list: list[dict]) -> list[dict]:
+
+def build_player_stats(
+    raw: dict,
+    players: PlayerDirectory,
+    round_model: _RoundModel,
+    rounds: list[dict],
+    kills_list: list[dict],
+    blinds_list: list[dict],
+    damages_list: list[dict],
+    clutches_list: list[dict],
+) -> list[dict]:
     total_rounds = len(rounds)
     stats: dict[int, dict] = {}
 
@@ -736,23 +862,42 @@ def build_player_stats(raw: dict, players: PlayerDirectory, round_model: _RoundM
             stats[idx] = {
                 "playerIndex": idx,
                 "rounds": total_rounds,
-                "kills": 0, "deaths": 0, "assists": 0,
-                "damageHealth": 0, "damageArmor": 0,
+                "kills": 0,
+                "deaths": 0,
+                "assists": 0,
+                "damageHealth": 0,
+                "damageArmor": 0,
                 "utilityDamage": 0,
                 "headshotCount": 0,
-                "firstKillCount": 0, "firstDeathCount": 0,
-                "tradeKillCount": 0, "tradeDeathCount": 0,
+                "firstKillCount": 0,
+                "firstDeathCount": 0,
+                "tradeKillCount": 0,
+                "tradeDeathCount": 0,
                 "noScopeKillCount": 0,
                 "wallbangKillCount": 0,
                 "collateralKillCount": 0,
-                "bombPlantCount": 0, "bombDefuseCount": 0,
-                "oneKillCount": 0, "twoKillCount": 0, "threeKillCount": 0,
-                "fourKillCount": 0, "fiveKillCount": 0,
-                "vsOneCount": 0, "vsOneWonCount": 0, "vsOneLostCount": 0,
-                "vsTwoCount": 0, "vsTwoWonCount": 0, "vsTwoLostCount": 0,
-                "vsThreeCount": 0, "vsThreeWonCount": 0, "vsThreeLostCount": 0,
-                "vsFourCount": 0, "vsFourWonCount": 0, "vsFourLostCount": 0,
-                "vsFiveCount": 0, "vsFiveWonCount": 0, "vsFiveLostCount": 0,
+                "bombPlantCount": 0,
+                "bombDefuseCount": 0,
+                "oneKillCount": 0,
+                "twoKillCount": 0,
+                "threeKillCount": 0,
+                "fourKillCount": 0,
+                "fiveKillCount": 0,
+                "vsOneCount": 0,
+                "vsOneWonCount": 0,
+                "vsOneLostCount": 0,
+                "vsTwoCount": 0,
+                "vsTwoWonCount": 0,
+                "vsTwoLostCount": 0,
+                "vsThreeCount": 0,
+                "vsThreeWonCount": 0,
+                "vsThreeLostCount": 0,
+                "vsFourCount": 0,
+                "vsFourWonCount": 0,
+                "vsFourLostCount": 0,
+                "vsFiveCount": 0,
+                "vsFiveWonCount": 0,
+                "vsFiveLostCount": 0,
                 "kastRounds": 0,
                 "flashAssistCount": 0,
                 "enemyFlashDurationSeconds": 0.0,
@@ -819,12 +964,16 @@ def build_player_stats(raw: dict, players: PlayerDirectory, round_model: _RoundM
             _get(killer_idx)["collateralKillCount"] += cnt
 
     # bomb plant / defuse
-    for rows_key, field in (("bomb_planted", "bombPlantCount"),
-                            ("bomb_defused", "bombDefuseCount")):
+    for rows_key, field in (
+        ("bomb_planted", "bombPlantCount"),
+        ("bomb_defused", "bombDefuseCount"),
+    ):
         for r in raw.get(rows_key, []):
             if _event_round_number(round_model, r) is None:
                 continue
-            idx = players.idx(_sid(r.get("user_steamid") or r.get("steamid") or r.get("userid")))
+            idx = players.idx(
+                _sid(r.get("user_steamid") or r.get("steamid") or r.get("userid"))
+            )
             if idx is not None:
                 _get(idx)[field] += 1
 
@@ -886,14 +1035,20 @@ def build_player_stats(raw: dict, players: PlayerDirectory, round_model: _RoundM
     all_rounds = {r["roundNumber"] for r in rounds}
     for s in stats.values():
         survived = all_rounds - s["_rounds_with_death"]
-        kast = (s["_rounds_with_kill"] | s["_rounds_with_assist"]
-                | survived | s["_rounds_traded"])
+        kast = (
+            s["_rounds_with_kill"]
+            | s["_rounds_with_assist"]
+            | survived
+            | s["_rounds_traded"]
+        )
         s["kastRounds"] = len(kast & all_rounds)
 
     # clutch buckets
     for c in clutches_list:
         s = _get(c["clutcherIndex"])
-        prefix = ["", "vsOne", "vsTwo", "vsThree", "vsFour", "vsFive"][min(c["opponentCount"], 5)]
+        prefix = ["", "vsOne", "vsTwo", "vsThree", "vsFour", "vsFive"][
+            min(c["opponentCount"], 5)
+        ]
         s[f"{prefix}Count"] += 1
         s[f"{prefix}WonCount" if c["won"] else f"{prefix}LostCount"] += 1
 
@@ -903,7 +1058,9 @@ def build_player_stats(raw: dict, players: PlayerDirectory, round_model: _RoundM
         row = {k: v for k, v in s.items() if not k.startswith("_")}
         row["adr"] = round(s["damageHealth"] / max(total_rounds, 1), 2)
         row["kast"] = round(s["kastRounds"] / max(total_rounds, 1) * 100, 3)
-        row["averageUtilityDamagePerRound"] = round(s["utilityDamage"] / max(total_rounds, 1), 2)
+        row["averageUtilityDamagePerRound"] = round(
+            s["utilityDamage"] / max(total_rounds, 1), 2
+        )
         row["enemyFlashDurationSeconds"] = round(row["enemyFlashDurationSeconds"], 3)
         row["teamFlashDurationSeconds"] = round(row["teamFlashDurationSeconds"], 3)
         out.append(row)

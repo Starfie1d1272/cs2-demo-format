@@ -16,7 +16,7 @@
  * absolute per-frame values.
  */
 
-import JSZip from "jszip";
+import JSZip from 'jszip';
 import {
   manifestSchema,
   SCHEMAS_BY_KEY,
@@ -38,9 +38,9 @@ import {
   type ReplayPlayerTrack,
   type Duels,
   type DuelPlayerTrack,
-} from "../schemas/index.js";
+} from '../schemas/index.js';
 
-export { decodeDelta, FLAG_ALIVE, FLAG_HAS_BOMB, FLAG_HAS_DEFUSE_KIT } from "../schemas/index.js";
+export { decodeDelta, FLAG_ALIVE, FLAG_HAS_BOMB, FLAG_HAS_DEFUSE_KIT } from '../schemas/index.js';
 
 export interface ParsedDemoPackage {
   manifest: Manifest;
@@ -71,10 +71,10 @@ export interface ParsedDemoPackage {
 export async function parseDemoPackage(buffer: Buffer | ArrayBuffer): Promise<ParsedDemoPackage> {
   const zip = await JSZip.loadAsync(buffer);
 
-  const manifestFile = zip.file("manifest.json");
-  if (!manifestFile) throw new Error("ZIP is missing manifest.json");
+  const manifestFile = zip.file('manifest.json');
+  if (!manifestFile) throw new Error('ZIP is missing manifest.json');
 
-  const manifestRaw = JSON.parse(await manifestFile.async("text"));
+  const manifestRaw = JSON.parse(await manifestFile.async('text'));
   const manifest = manifestSchema.parse(manifestRaw);
 
   const files: Record<string, unknown> = {};
@@ -83,7 +83,7 @@ export async function parseDemoPackage(buffer: Buffer | ArrayBuffer): Promise<Pa
     const entry = zip.file(filename);
     if (!entry) throw new Error(`ZIP is missing file: ${filename} (key: ${key})`);
 
-    const raw = JSON.parse(await entry.async("text"));
+    const raw = JSON.parse(await entry.async('text'));
     const schema = (SCHEMAS_BY_KEY as Record<string, { parse: (v: unknown) => unknown }>)[key];
 
     if (!schema) throw new Error(`Unknown manifest file key: ${key}`);
@@ -91,7 +91,7 @@ export async function parseDemoPackage(buffer: Buffer | ArrayBuffer): Promise<Pa
     files[key] = schema.parse(raw);
   }
 
-  return { manifest, files: files as unknown as ParsedDemoPackage["files"] };
+  return { manifest, files: files as unknown as ParsedDemoPackage['files'] };
 }
 
 /** Absolute per-frame values decoded from a replay player track. */

@@ -13,16 +13,38 @@ from typing import Any
 
 # ── hit groups ────────────────────────────────────────────────────────────────
 
-_HITGROUP_ENUM = {"generic", "head", "chest", "stomach", "left_arm", "right_arm",
-                  "left_leg", "right_leg", "gear", "neck"}
+_HITGROUP_ENUM = {
+    "generic",
+    "head",
+    "chest",
+    "stomach",
+    "left_arm",
+    "right_arm",
+    "left_leg",
+    "right_leg",
+    "gear",
+    "neck",
+}
 
 _HITGROUP_MAP = {
-    "head": "head", "chest": "chest", "stomach": "stomach",
-    "leftarm": "left_arm", "left arm": "left_arm", "left_arm": "left_arm",
-    "rightarm": "right_arm", "right arm": "right_arm", "right_arm": "right_arm",
-    "leftleg": "left_leg", "left leg": "left_leg", "left_leg": "left_leg",
-    "rightleg": "right_leg", "right leg": "right_leg", "right_leg": "right_leg",
-    "gear": "gear", "neck": "neck", "generic": "generic",
+    "head": "head",
+    "chest": "chest",
+    "stomach": "stomach",
+    "leftarm": "left_arm",
+    "left arm": "left_arm",
+    "left_arm": "left_arm",
+    "rightarm": "right_arm",
+    "right arm": "right_arm",
+    "right_arm": "right_arm",
+    "leftleg": "left_leg",
+    "left leg": "left_leg",
+    "left_leg": "left_leg",
+    "rightleg": "right_leg",
+    "right leg": "right_leg",
+    "right_leg": "right_leg",
+    "gear": "gear",
+    "neck": "neck",
+    "generic": "generic",
 }
 
 
@@ -84,11 +106,21 @@ def normalize_round_end_reason(raw: Any) -> str:
 
 # ── grenades ───────────────────────────────────────────────────────────────────
 
-_GRENADE_TYPE_ENUM = {"flashbang", "smoke", "molotov", "incendiary", "hegrenade", "decoy"}
+_GRENADE_TYPE_ENUM = {
+    "flashbang",
+    "smoke",
+    "molotov",
+    "incendiary",
+    "hegrenade",
+    "decoy",
+}
 _GRENADE_WEAPON_TO_TYPE = {
-    "smokegrenade": "smoke", "flashbang": "flashbang",
-    "hegrenade": "hegrenade", "molotov": "molotov",
-    "incgrenade": "incendiary", "decoy": "decoy",
+    "smokegrenade": "smoke",
+    "flashbang": "flashbang",
+    "hegrenade": "hegrenade",
+    "molotov": "molotov",
+    "incgrenade": "incendiary",
+    "decoy": "decoy",
 }
 
 
@@ -121,8 +153,12 @@ def grenade_projectile_to_type(class_name: str) -> str | None:
 # grenade sets and ignore everything else (knives, C4, Zeus, unknown).
 
 _GRENADE_ITEMS = {
-    "Smoke Grenade", "Flashbang", "High Explosive Grenade",
-    "Incendiary Grenade", "Molotov", "Decoy Grenade",
+    "Smoke Grenade",
+    "Flashbang",
+    "High Explosive Grenade",
+    "Incendiary Grenade",
+    "Molotov",
+    "Decoy Grenade",
 }
 _GRENADE_ITEM_TO_TYPE = {
     "Smoke Grenade": "smoke",
@@ -133,19 +169,46 @@ _GRENADE_ITEM_TO_TYPE = {
     "Decoy Grenade": "decoy",
 }
 _PISTOL_ITEMS = {
-    "Glock-18", "USP-S", "P2000", "Dual Berettas", "P250", "Five-SeveN",
-    "Tec-9", "CZ75-Auto", "Desert Eagle", "R8 Revolver",
+    "Glock-18",
+    "USP-S",
+    "P2000",
+    "Dual Berettas",
+    "P250",
+    "Five-SeveN",
+    "Tec-9",
+    "CZ75-Auto",
+    "Desert Eagle",
+    "R8 Revolver",
 }
 _PRIMARY_ITEMS = {
     # SMG
-    "MAC-10", "MP9", "MP7", "MP5-SD", "UMP-45", "P90", "PP-Bizon",
+    "MAC-10",
+    "MP9",
+    "MP7",
+    "MP5-SD",
+    "UMP-45",
+    "P90",
+    "PP-Bizon",
     # Rifle / sniper
-    "Galil AR", "FAMAS", "AK-47", "M4A4", "M4A1-S", "SSG 08", "SG 553",
-    "AUG", "AWP", "G3SG1", "SCAR-20",
+    "Galil AR",
+    "FAMAS",
+    "AK-47",
+    "M4A4",
+    "M4A1-S",
+    "SSG 08",
+    "SG 553",
+    "AUG",
+    "AWP",
+    "G3SG1",
+    "SCAR-20",
     # Shotgun
-    "Nova", "XM1014", "Sawed-Off", "MAG-7",
+    "Nova",
+    "XM1014",
+    "Sawed-Off",
+    "MAG-7",
     # LMG
-    "M249", "Negev",
+    "M249",
+    "Negev",
 }
 
 
@@ -246,7 +309,11 @@ def normalize_weapon_name(raw: Any) -> str | None:
     if lower in _WEAPON_DISPLAY_TO_CANONICAL:
         return _WEAPON_DISPLAY_TO_CANONICAL[lower]
     ident = lower.replace("-", "_").replace(" ", "_")
-    return ident if ident and ident[0].isalpha() and all(c.isalnum() or c == "_" for c in ident) else None
+    return (
+        ident
+        if ident and ident[0].isalpha() and all(c.isalnum() or c == "_" for c in ident)
+        else None
+    )
 
 
 # ── bombs ──────────────────────────────────────────────────────────────────────
@@ -257,6 +324,7 @@ def normalize_weapon_name(raw: Any) -> str | None:
 # straight from the demo: the CS2 engine tags each player's current named area
 # in `last_place_name`, which is "BombsiteA" / "BombsiteB" when on a site. This
 # is authoritative, map-agnostic, and needs no per-map calibration.
+
 
 def bomb_site_from_place(place: Any) -> str | None:
     """Map a CS2 place name to "a"/"b"; None if it is not a bombsite area."""
@@ -269,10 +337,15 @@ def bomb_site_from_place(place: Any) -> str | None:
 
 
 _BOMB_TYPE_MAP = {
-    "plant": "plant_begin", "plant_begin": "plant_begin",
+    "plant": "plant_begin",
+    "plant_begin": "plant_begin",
     "planted": "planted",
-    "defuse": "defuse_begin", "defuse_begin": "defuse_begin",
-    "defused": "defused", "defuse_complete": "defused",
-    "explode": "exploded", "exploded": "exploded",
-    "dropped": "dropped", "picked_up": "picked_up",
+    "defuse": "defuse_begin",
+    "defuse_begin": "defuse_begin",
+    "defused": "defused",
+    "defuse_complete": "defused",
+    "explode": "exploded",
+    "exploded": "exploded",
+    "dropped": "dropped",
+    "picked_up": "picked_up",
 }

@@ -22,18 +22,38 @@ from typing import Any
 
 # Metadata / roster taken from the first part, never shifted or concatenated.
 _META_FIRST = {
-    "_timings", "header", "tickrate", "sample_rate", "match_start_tick",
-    "team_a_name", "team_b_name", "player_info",
+    "_timings",
+    "header",
+    "tickrate",
+    "sample_rate",
+    "match_start_tick",
+    "team_a_name",
+    "team_b_name",
+    "player_info",
 }
 # Event lists: list[dict]; shift any of these tick-bearing keys present on a row.
 _EVENT_LISTS = {
-    "round_starts", "round_freeze_ends", "round_ends",
-    "deaths", "hurts", "fires", "blinds",
-    "bomb_planted", "bomb_defused", "bomb_exploded", "bomb_beginplant",
-    "bomb_begindefuse", "bomb_dropped", "bomb_pickup",
-    "grenade_detonations", "inferno_expires", "smoke_expires",
-    "grenade_throws", "grenade_trajectories",
-    "round_side_samples", "economy_raw",
+    "round_starts",
+    "round_freeze_ends",
+    "round_ends",
+    "deaths",
+    "hurts",
+    "fires",
+    "blinds",
+    "bomb_planted",
+    "bomb_defused",
+    "bomb_exploded",
+    "bomb_beginplant",
+    "bomb_begindefuse",
+    "bomb_dropped",
+    "bomb_pickup",
+    "grenade_detonations",
+    "inferno_expires",
+    "smoke_expires",
+    "grenade_throws",
+    "grenade_trajectories",
+    "round_side_samples",
+    "economy_raw",
 }
 _ROW_TICK_KEYS = ("tick", "destroy_tick", "start_tick")
 # Round-structure lists are ownership-filtered, never tick-trimmed; the rest are
@@ -70,7 +90,12 @@ def _max_tick(raw: dict[str, Any]) -> int:
         cands.extend(int(t) for t in (raw.get(key) or []) if t)
     for key in _DF_KEYS:
         df = raw.get(key)
-        if df is not None and hasattr(df, "columns") and "tick" in getattr(df, "columns", []) and len(df):
+        if (
+            df is not None
+            and hasattr(df, "columns")
+            and "tick" in getattr(df, "columns", [])
+            and len(df)
+        ):
             cands.append(int(df["tick"].max()))
     return max(cands)
 
@@ -87,7 +112,11 @@ def _shift_part(raw: dict[str, Any], off: int) -> None:
                     row[tk] = int(v) + off
     for key in _DF_KEYS:
         df = raw.get(key)
-        if df is not None and hasattr(df, "columns") and "tick" in getattr(df, "columns", []):
+        if (
+            df is not None
+            and hasattr(df, "columns")
+            and "tick" in getattr(df, "columns", [])
+        ):
             df = df.copy()
             df["tick"] = df["tick"] + off
             raw[key] = df
@@ -122,21 +151,30 @@ def merge_raw(parts: list[dict[str, Any]]) -> dict[str, Any]:
     prev_max = 0
     for idx, part in enumerate(parts):
         if idx > 0:
-            for key, is_end in (("round_ends", True), ("round_starts", False),
-                                ("round_freeze_ends", False)):
+            for key, is_end in (
+                ("round_ends", True),
+                ("round_starts", False),
+                ("round_freeze_ends", False),
+            ):
                 rows = part.get(key) or []
                 part[key] = [r for r in rows if _round_of(r, is_end) > prev_max]
             # Trim combat/effect residue captured before this part's first live round
             # (a resume starts mid-freeze and re-emits seam events the previous part
             # already owns). Threshold = first owned round's freeze-end tick.
-            freezes = [int(r.get("tick") or 0) for r in part.get("round_freeze_ends") or []
-                       if int(r.get("tick") or 0) > 0]
+            freezes = [
+                int(r.get("tick") or 0)
+                for r in part.get("round_freeze_ends") or []
+                if int(r.get("tick") or 0) > 0
+            ]
             trim_before = min(freezes) if freezes else 0
             if trim_before > 0:
                 for key in _EVENT_LISTS - _ROUND_LISTS:
                     rows = part.get(key) or []
-                    part[key] = [r for r in rows
-                                 if not (0 < int(r.get("tick") or 0) < trim_before)]
+                    part[key] = [
+                        r
+                        for r in rows
+                        if not (0 < int(r.get("tick") or 0) < trim_before)
+                    ]
         ends = part.get("round_ends") or []
         if ends:
             prev_max = max([prev_max] + [_round_of(r, True) for r in ends])
@@ -155,9 +193,11 @@ def merge_raw(parts: list[dict[str, Any]]) -> dict[str, Any]:
         merged[key] = out
 
     import pandas as pd  # lazy: native dep
+
     for key in _DF_KEYS:
-        frames = [part[key] for part in parts
-                  if part.get(key) is not None and len(part[key])]
+        frames = [
+            part[key] for part in parts if part.get(key) is not None and len(part[key])
+        ]
         merged[key] = pd.concat(frames, ignore_index=True) if frames else base.get(key)
 
     for key in _INT_TICK_LISTS:
@@ -178,12 +218,17 @@ def merge_raw(parts: list[dict[str, Any]]) -> dict[str, Any]:
 def parse_and_merge(dem_paths: list[str], **parse_kwargs: Any) -> dict[str, Any]:
     """Parse each part with parse_demo() and merge into one raw dict."""
     from .parse import parse_demo
+
     progress = parse_kwargs.pop("progress", None)
     n = len(dem_paths)
     parts: list[dict[str, Any]] = []
     for i, path in enumerate(dem_paths):
+
         def _scaled(stage: str, frac: float, _i=i) -> None:
             if progress is not None:
                 progress(f"[part {_i + 1}/{n}] {stage}", (_i + frac) / n)
-        parts.append(parse_demo(path, progress=_scaled if progress else None, **parse_kwargs))
+
+        parts.append(
+            parse_demo(path, progress=_scaled if progress else None, **parse_kwargs)
+        )
     return merge_raw(parts)
