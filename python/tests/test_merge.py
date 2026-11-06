@@ -18,12 +18,18 @@ def test_merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue():
     # Part 0 owns rounds 1-2 (total_rounds_played: end == round number).
     part0 = _part(
         64,
-        round_ends=[{"total_rounds_played": 1, "tick": 200},
-                    {"total_rounds_played": 2, "tick": 460}],
-        round_starts=[{"total_rounds_played": 0, "tick": 50},
-                      {"total_rounds_played": 1, "tick": 300}],
-        round_freeze_ends=[{"total_rounds_played": 0, "tick": 100},
-                           {"total_rounds_played": 1, "tick": 360}],
+        round_ends=[
+            {"total_rounds_played": 1, "tick": 200},
+            {"total_rounds_played": 2, "tick": 460},
+        ],
+        round_starts=[
+            {"total_rounds_played": 0, "tick": 50},
+            {"total_rounds_played": 1, "tick": 300},
+        ],
+        round_freeze_ends=[
+            {"total_rounds_played": 0, "tick": 100},
+            {"total_rounds_played": 1, "tick": 360},
+        ],
         hurts=[{"tick": 150}, {"tick": 400}],
     )
     # Part 1 owns rounds 3-4 with a LOCAL tick clock (restarts near 0) and resume
@@ -31,15 +37,21 @@ def test_merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue():
     # phantom hurt at the very first tick.
     part1 = _part(
         64,
-        round_ends=[{"total_rounds_played": 2, "tick": 1},     # spurious (round 2)
-                    {"total_rounds_played": 3, "tick": 200},
-                    {"total_rounds_played": 4, "tick": 460}],
-        round_starts=[{"total_rounds_played": 1, "tick": 2},   # spurious (round 2)
-                      {"total_rounds_played": 2, "tick": 5},
-                      {"total_rounds_played": 3, "tick": 300}],
-        round_freeze_ends=[{"total_rounds_played": 1, "tick": 3},  # spurious
-                           {"total_rounds_played": 2, "tick": 60},
-                           {"total_rounds_played": 3, "tick": 360}],
+        round_ends=[
+            {"total_rounds_played": 2, "tick": 1},  # spurious (round 2)
+            {"total_rounds_played": 3, "tick": 200},
+            {"total_rounds_played": 4, "tick": 460},
+        ],
+        round_starts=[
+            {"total_rounds_played": 1, "tick": 2},  # spurious (round 2)
+            {"total_rounds_played": 2, "tick": 5},
+            {"total_rounds_played": 3, "tick": 300},
+        ],
+        round_freeze_ends=[
+            {"total_rounds_played": 1, "tick": 3},  # spurious
+            {"total_rounds_played": 2, "tick": 60},
+            {"total_rounds_played": 3, "tick": 360},
+        ],
         hurts=[{"tick": 4}, {"tick": 120}, {"tick": 400}],  # tick 4 == resume residue
     )
 
@@ -61,8 +73,11 @@ def test_merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue():
 
 
 def test_single_part_passthrough():
-    part = _part(64, [{"total_rounds_played": 1, "tick": 200}],
-                 [{"total_rounds_played": 0, "tick": 50}],
-                 [{"total_rounds_played": 0, "tick": 100}],
-                 [{"tick": 150}])
+    part = _part(
+        64,
+        [{"total_rounds_played": 1, "tick": 200}],
+        [{"total_rounds_played": 0, "tick": 50}],
+        [{"total_rounds_played": 0, "tick": 100}],
+        [{"tick": 150}],
+    )
     assert merge_raw([part]) is part

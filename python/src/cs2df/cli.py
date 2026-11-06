@@ -23,46 +23,102 @@ DEFAULT_COMPRESS_LEVEL = 3
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="cs2df",
-                                     description="cs2-demo-format v3 reference exporter & validator")
+    parser = argparse.ArgumentParser(
+        prog="cs2df", description="cs2-demo-format v3 reference exporter & validator"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_exp = sub.add_parser("export", help="export a CS2 .dem to a v3 ZIP package")
-    p_exp.add_argument("demo", nargs="+",
-                       help="path to the .dem file; pass multiple split parts "
-                            "(…-p1.dem …-p2.dem) of ONE match to merge them")
-    p_exp.add_argument("-o", "--output", default=None,
-                       help="output zip path (default: <demo>.zip next to the input)")
-    p_exp.add_argument("--research", action="store_true",
-                       help="also emit duels.json (full-tick combat windows)")
-    p_exp.add_argument("--sample-rate", type=int, default=8,
-                       help="replay stream sample rate in Hz (default 8)")
-    p_exp.add_argument("--window-before", type=int, default=2000,
-                       help="duel window extent before each anchor, ms (default 2000)")
-    p_exp.add_argument("--window-after", type=int, default=1000,
-                       help="duel window extent after each anchor, ms (default 1000)")
-    p_exp.add_argument("--compress-level", type=int, default=DEFAULT_COMPRESS_LEVEL,
-                       help="ZIP DEFLATE compression level 0-9 (default 3)")
-    p_exp.add_argument("-q", "--quiet", action="store_true", help="suppress progress output")
+    p_exp.add_argument(
+        "demo",
+        nargs="+",
+        help="path to the .dem file; pass multiple split parts "
+        "(…-p1.dem …-p2.dem) of ONE match to merge them",
+    )
+    p_exp.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="output zip path (default: <demo>.zip next to the input)",
+    )
+    p_exp.add_argument(
+        "--research",
+        action="store_true",
+        help="also emit duels.json (full-tick combat windows)",
+    )
+    p_exp.add_argument(
+        "--sample-rate",
+        type=int,
+        default=8,
+        help="replay stream sample rate in Hz (default 8)",
+    )
+    p_exp.add_argument(
+        "--window-before",
+        type=int,
+        default=2000,
+        help="duel window extent before each anchor, ms (default 2000)",
+    )
+    p_exp.add_argument(
+        "--window-after",
+        type=int,
+        default=1000,
+        help="duel window extent after each anchor, ms (default 1000)",
+    )
+    p_exp.add_argument(
+        "--compress-level",
+        type=int,
+        default=DEFAULT_COMPRESS_LEVEL,
+        help="ZIP DEFLATE compression level 0-9 (default 3)",
+    )
+    p_exp.add_argument(
+        "-q", "--quiet", action="store_true", help="suppress progress output"
+    )
 
-    p_batch = sub.add_parser("export-batch", help="batch-export all .dem files in a directory")
-    p_batch.add_argument("directory", help="directory to scan for .dem files (non-recursive)")
-    p_batch.add_argument("--research", action="store_true",
-                         help="also emit duels.json")
-    p_batch.add_argument("--sample-rate", type=int, default=8,
-                         help="replay stream sample rate in Hz (default 8)")
-    p_batch.add_argument("--window-before", type=int, default=2000,
-                         help="duel window extent before each anchor, ms (default 2000)")
-    p_batch.add_argument("--window-after", type=int, default=1000,
-                         help="duel window extent after each anchor, ms (default 1000)")
-    p_batch.add_argument("--compress-level", type=int, default=DEFAULT_COMPRESS_LEVEL,
-                         help="ZIP DEFLATE compression level 0-9 (default 3)")
-    p_batch.add_argument("--workers", type=int, default=None,
-                         help="parallel worker count (default: logical CPU count)")
-    p_batch.add_argument("--fail-fast", action="store_true",
-                         help="stop on first failure")
-    p_batch.add_argument("--descriptive", action="store_true",
-                         help="use descriptive filenames (date_map_teams_score.zip)")
+    p_batch = sub.add_parser(
+        "export-batch", help="batch-export all .dem files in a directory"
+    )
+    p_batch.add_argument(
+        "directory", help="directory to scan for .dem files (non-recursive)"
+    )
+    p_batch.add_argument("--research", action="store_true", help="also emit duels.json")
+    p_batch.add_argument(
+        "--sample-rate",
+        type=int,
+        default=8,
+        help="replay stream sample rate in Hz (default 8)",
+    )
+    p_batch.add_argument(
+        "--window-before",
+        type=int,
+        default=2000,
+        help="duel window extent before each anchor, ms (default 2000)",
+    )
+    p_batch.add_argument(
+        "--window-after",
+        type=int,
+        default=1000,
+        help="duel window extent after each anchor, ms (default 1000)",
+    )
+    p_batch.add_argument(
+        "--compress-level",
+        type=int,
+        default=DEFAULT_COMPRESS_LEVEL,
+        help="ZIP DEFLATE compression level 0-9 (default 3)",
+    )
+    p_batch.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="parallel worker count (default: logical CPU count)",
+    )
+    p_batch.add_argument(
+        "--fail-fast", action="store_true", help="stop on first failure"
+    )
+    p_batch.add_argument(
+        "--descriptive",
+        action="store_true",
+        help="use descriptive filenames (date_map_teams_score.zip)",
+    )
 
     p_val = sub.add_parser("validate", help="validate a v3 ZIP package")
     p_val.add_argument("zip", help="path to the .zip file to validate")
@@ -99,17 +155,21 @@ def _cmd_export(args) -> int:
     t0 = time.perf_counter()
     progress = None
     if not args.quiet:
+
         def progress(stage: str, frac: float) -> None:
             print(f"  [{frac * 100:5.1f}%] {stage}")
 
     if len(dems) > 1:
         print(f"合并 {len(dems)} 段 → {out.name}")
-    data, _match_meta = export_demo_merged([str(d) for d in dems], research=args.research,
-                                           sample_rate=args.sample_rate,
-                                           window_before_ms=args.window_before,
-                                           window_after_ms=args.window_after,
-                                           compress_level=args.compress_level,
-                                           progress=progress)
+    data, _match_meta = export_demo_merged(
+        [str(d) for d in dems],
+        research=args.research,
+        sample_rate=args.sample_rate,
+        window_before_ms=args.window_before,
+        window_after_ms=args.window_after,
+        compress_level=args.compress_level,
+        progress=progress,
+    )
     out.write_bytes(data)
     dt = time.perf_counter() - t0
     print(f"wrote {out} ({len(data) / 1e6:.2f} MB) in {dt:.1f}s")
@@ -150,8 +210,13 @@ def _cmd_export_batch(args) -> int:
         futures = {}
         for dem in demos:
             submitted = time.perf_counter()
-            future = pool.submit(_export_one_report, str(dem), str(directory),
-                                 export_kwargs, args.descriptive)
+            future = pool.submit(
+                _export_one_report,
+                str(dem),
+                str(directory),
+                export_kwargs,
+                args.descriptive,
+            )
             futures[future] = (dem, submitted)
         for future in as_completed(futures):
             dem, submitted = futures[future]
@@ -161,10 +226,14 @@ def _cmd_export_batch(args) -> int:
                 row = _failed_batch_row(dem, submitted, _format_exception(exc))
             report.append(row)
             if row["ok"]:
-                print(f"  ok  {dem.name} -> {Path(row['zip']).name}  "
-                      f"{row['zipBytes'] / 1e6:.1f}MB  {row['durationSeconds']:.1f}s")
+                print(
+                    f"  ok  {dem.name} -> {Path(row['zip']).name}  "
+                    f"{row['zipBytes'] / 1e6:.1f}MB  {row['durationSeconds']:.1f}s"
+                )
             else:
-                print(f"  FAIL {dem.name}: {row['error']}  ({row['durationSeconds']:.1f}s)")
+                print(
+                    f"  FAIL {dem.name}: {row['error']}  ({row['durationSeconds']:.1f}s)"
+                )
                 if args.fail_fast:
                     pool.shutdown(wait=False, cancel_futures=True)
                     dt = time.perf_counter() - t0
@@ -209,8 +278,10 @@ def _resolve_spec_dir(arg: str | None) -> Path | None:
 
 # ── batch helpers (module-level for picklability with ProcessPoolExecutor) ──────
 
-def _export_one_report(dem_path: str, out_dir: str, export_kwargs: dict,
-                       descriptive: bool) -> dict:
+
+def _export_one_report(
+    dem_path: str, out_dir: str, export_kwargs: dict, descriptive: bool
+) -> dict:
     """Parse → build → package one demo; return a structured result row."""
     from .package import export_demo
 
@@ -275,13 +346,15 @@ def _build_descriptive_from_meta(match_meta: dict, stem: str, date_str: str) -> 
 def _sanitize(s: str) -> str:
     """Sanitize a string for safe filename use."""
     for ch in r' <>:"/\|?*':
-        s = s.replace(ch, '_')
-    while '__' in s:
-        s = s.replace('__', '_')
-    return s.strip('_')
+        s = s.replace(ch, "_")
+    while "__" in s:
+        s = s.replace("__", "_")
+    return s.strip("_")
 
 
-def _write_unique_zip(out_dir: Path, preferred_name: str, stem: str, data: bytes) -> Path:
+def _write_unique_zip(
+    out_dir: Path, preferred_name: str, stem: str, data: bytes
+) -> Path:
     """Write bytes without overwriting an existing batch output."""
     preferred = Path(preferred_name)
     suffix = preferred.suffix or ".zip"
@@ -335,20 +408,24 @@ def _compress_level_ok(value: int) -> bool:
 
 
 def _aggregate_timings(report: list[dict]) -> dict:
-    rows = [r.get("timingsSeconds") for r in report if r.get("ok") and r.get("timingsSeconds")]
+    rows = [
+        r.get("timingsSeconds")
+        for r in report
+        if r.get("ok") and r.get("timingsSeconds")
+    ]
     if not rows:
         return {"count": 0, "total": {}, "average": {}}
     keys = sorted({key for row in rows for key in row})
     totals = {
-        key: round(sum(float(row.get(key) or 0.0) for row in rows), 3)
-        for key in keys
+        key: round(sum(float(row.get(key) or 0.0) for row in rows), 3) for key in keys
     }
     averages = {key: round(value / len(rows), 3) for key, value in totals.items()}
     return {"count": len(rows), "total": totals, "average": averages}
 
 
-def _write_batch_report(out_dir: Path, report: list[dict],
-                        duration_seconds: float) -> None:
+def _write_batch_report(
+    out_dir: Path, report: list[dict], duration_seconds: float
+) -> None:
     """Write report.json with aggregate stats next to the exported ZIPs."""
     demo_bytes = sum(r["demoBytes"] for r in report)
     zip_bytes = sum(r["zipBytes"] for r in report)

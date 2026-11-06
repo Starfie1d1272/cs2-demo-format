@@ -52,9 +52,22 @@ _GRENADE_PLAYER_FIELDS = ["steamid", "X", "Y", "Z"]
 # `balance` is the cash account (replay `money` column);
 # `current_equip_value` is the equipment value (`equipValue` column).
 _REPLAY_PROPS = [
-    "steamid", "team_num", "X", "Y", "Z", "yaw", "pitch",
-    "health", "armor", "active_weapon_name", "flash_duration",
-    "balance", "current_equip_value", "has_defuser", "last_place_name", "inventory",
+    "steamid",
+    "team_num",
+    "X",
+    "Y",
+    "Z",
+    "yaw",
+    "pitch",
+    "health",
+    "armor",
+    "active_weapon_name",
+    "flash_duration",
+    "balance",
+    "current_equip_value",
+    "has_defuser",
+    "last_place_name",
+    "inventory",
 ]
 
 # Lean per-frame props for full-tick duel windows.
@@ -78,9 +91,12 @@ def _raise_if_control_flow(exc: BaseException) -> None:
         raise exc
 
 
-def _safe_event(parser: DemoParser, event: str,
-                other: list[str] | None = None,
-                player: list[str] | None = None) -> list[dict]:
+def _safe_event(
+    parser: DemoParser,
+    event: str,
+    other: list[str] | None = None,
+    player: list[str] | None = None,
+) -> list[dict]:
     try:
         kwargs: dict[str, list[str]] = {}
         if other is not None:
@@ -92,9 +108,12 @@ def _safe_event(parser: DemoParser, event: str,
         return []
 
 
-def _safe_events(parser: DemoParser, names: list[str],
-                 other: list[str] | None = None,
-                 player: list[str] | None = None) -> dict[str, list[dict]]:
+def _safe_events(
+    parser: DemoParser,
+    names: list[str],
+    other: list[str] | None = None,
+    player: list[str] | None = None,
+) -> dict[str, list[dict]]:
     """Batch-parse several events in ONE demo scan via parse_events."""
     kwargs: dict[str, list[str]] = {}
     if other is not None:
@@ -105,14 +124,23 @@ def _safe_events(parser: DemoParser, names: list[str],
         pairs = parser.parse_events(names, **kwargs)
         out = {name: _rows(df) for name, df in pairs}
     except Exception:
-        log.warning("parse_events(%s) failed; falling back to per-event parse", names, exc_info=True)
-        out = {name: _safe_event(parser, name, other=other, player=player) for name in names}
+        log.warning(
+            "parse_events(%s) failed; falling back to per-event parse",
+            names,
+            exc_info=True,
+        )
+        out = {
+            name: _safe_event(parser, name, other=other, player=player)
+            for name in names
+        }
     for name in names:
         out.setdefault(name, [])
     return out
 
 
-def _safe_ticks_df(parser: DemoParser, props: list[str], ticks: list[int]) -> "pd.DataFrame | None":
+def _safe_ticks_df(
+    parser: DemoParser, props: list[str], ticks: list[int]
+) -> "pd.DataFrame | None":
     """parse_ticks kept as a DataFrame; drops unknown props one by one on failure."""
     remaining = list(props)
     while remaining:
@@ -180,20 +208,31 @@ def _rebuild_blinds(parser: DemoParser, detonates: list[dict]) -> list[dict]:
             if len(dets) > 1 and px is not None and py is not None:
                 det = min(
                     dets,
-                    key=lambda d: (float(d.get("x") or 0.0) - px) ** 2 + (float(d.get("y") or 0.0) - py) ** 2,
+                    key=lambda d: (
+                        (float(d.get("x") or 0.0) - px) ** 2
+                        + (float(d.get("y") or 0.0) - py) ** 2
+                    ),
                 )
-            out.append({
-                "tick": tick,
-                "attacker_steamid": det.get("user_steamid"),
-                "user_steamid": sid,
-                "blind_duration": after,
-            })
+            out.append(
+                {
+                    "tick": tick,
+                    "attacker_steamid": det.get("user_steamid"),
+                    "user_steamid": sid,
+                    "blind_duration": after,
+                }
+            )
     return out
 
 
-def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
-               window_before_ms: int = 2000, window_after_ms: int = 1000,
-               progress: ProgressFn | None = None) -> dict[str, Any]:
+def parse_demo(
+    dem_path: str,
+    *,
+    sample_rate: int = 8,
+    research: bool = False,
+    window_before_ms: int = 2000,
+    window_after_ms: int = 1000,
+    progress: ProgressFn | None = None,
+) -> dict[str, Any]:
     """Full extraction. Event tables are lists of dicts; per-frame data is DataFrames."""
     from demoparser2 import DemoParser  # lazy: native dep
 
@@ -226,9 +265,15 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
 
     _p("round events", 0.05)
     stage_started = time.perf_counter()
-    g_round = _safe_events(p,
-        ["round_start", "round_freeze_end", "round_end", "player_blind",
-         "round_announce_match_start"],
+    g_round = _safe_events(
+        p,
+        [
+            "round_start",
+            "round_freeze_end",
+            "round_end",
+            "player_blind",
+            "round_announce_match_start",
+        ],
         other=["winner", "reason", "legacy", "blind_duration", "total_rounds_played"],
     )
     _record("parse.roundEvents", stage_started)
@@ -243,25 +288,46 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
 
     _p("kills", 0.12)
     stage_started = time.perf_counter()
-    deaths = _safe_event(p, "player_death",
-        other=["headshot", "noscope", "thrusmoke", "penetrated", "penetrated_objects",
-               "assistedflash", "attackerblind", "total_rounds_played"],
+    deaths = _safe_event(
+        p,
+        "player_death",
+        other=[
+            "headshot",
+            "noscope",
+            "thrusmoke",
+            "penetrated",
+            "penetrated_objects",
+            "assistedflash",
+            "attackerblind",
+            "total_rounds_played",
+        ],
         player=["X", "Y", "Z", "active_weapon"],
     )
     _record("parse.kills", stage_started)
 
     _p("damages", 0.2)
     stage_started = time.perf_counter()
-    hurts = _safe_event(p, "player_hurt",
-        other=["weapon", "hitgroup", "dmg_health", "dmg_armor", "health", "armor",
-               "total_rounds_played"],
+    hurts = _safe_event(
+        p,
+        "player_hurt",
+        other=[
+            "weapon",
+            "hitgroup",
+            "dmg_health",
+            "dmg_armor",
+            "health",
+            "armor",
+            "total_rounds_played",
+        ],
         player=["X", "Y", "Z"],
     )
     _record("parse.damages", stage_started)
 
     _p("shots", 0.28)
     stage_started = time.perf_counter()
-    fires = _safe_event(p, "weapon_fire",
+    fires = _safe_event(
+        p,
+        "weapon_fire",
         other=["weapon", "total_rounds_played"],
         player=["X", "Y", "Z", "yaw", "pitch"],
     )
@@ -270,29 +336,47 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     stage_started = time.perf_counter()
     fire_velocity_df = None
     if fires:
-        shot_ticks = sorted({int(r["tick"]) for r in fires if int(r.get("tick") or 0) > 0})
+        shot_ticks = sorted(
+            {int(r["tick"]) for r in fires if int(r.get("tick") or 0) > 0}
+        )
         if shot_ticks:
             fire_velocity_df = _safe_ticks_df(
-                p, ["steamid", "velocity_X", "velocity_Y", "velocity_Z"], shot_ticks)
+                p, ["steamid", "velocity_X", "velocity_Y", "velocity_Z"], shot_ticks
+            )
     _record("parse.shotsVelocity", stage_started)
 
     _p("bomb events", 0.36)
     stage_started = time.perf_counter()
-    g_bomb = _safe_events(p,
-        ["bomb_planted", "bomb_defused", "bomb_exploded",
-         "bomb_beginplant", "bomb_begindefuse", "bomb_dropped", "bomb_pickup"],
+    g_bomb = _safe_events(
+        p,
+        [
+            "bomb_planted",
+            "bomb_defused",
+            "bomb_exploded",
+            "bomb_beginplant",
+            "bomb_begindefuse",
+            "bomb_dropped",
+            "bomb_pickup",
+        ],
         other=["site", "total_rounds_played"],
-        player=["steamid", "X", "Y", "Z", "last_place_name"])
+        player=["steamid", "X", "Y", "Z", "last_place_name"],
+    )
     _record("parse.bombEvents", stage_started)
 
     _p("grenade detonations", 0.42)
     stage_started = time.perf_counter()
-    g_nade = _safe_events(p,
-        [name for name, _ in _GRENADE_EVENTS] + ["inferno_expire", "smokegrenade_expired"],
-        other=["total_rounds_played"], player=_GRENADE_PLAYER_FIELDS)
+    g_nade = _safe_events(
+        p,
+        [name for name, _ in _GRENADE_EVENTS]
+        + ["inferno_expire", "smokegrenade_expired"],
+        other=["total_rounds_played"],
+        player=_GRENADE_PLAYER_FIELDS,
+    )
     grenade_detonations: list[dict] = []
     for ev_name, gtype in _GRENADE_EVENTS:
-        grenade_detonations.extend({**r, "_grenade_type": gtype} for r in g_nade[ev_name])
+        grenade_detonations.extend(
+            {**r, "_grenade_type": gtype} for r in g_nade[ev_name]
+        )
     _record("parse.grenadeEvents", stage_started)
 
     # ── player info / team names at match start ──────────────────
@@ -309,9 +393,12 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     team_a_name: str | None = None
     team_b_name: str | None = None
     try:
-        for row in _rows(p.parse_ticks(
+        for row in _rows(
+            p.parse_ticks(
                 ["CCSTeam.m_szClanTeamname", "CCSTeam.m_iTeamNum"],
-                ticks=[match_start_tick])):
+                ticks=[match_start_tick],
+            )
+        ):
             tn = row.get("CCSTeam.m_iTeamNum")
             name = str(row.get("CCSTeam.m_szClanTeamname") or "").strip()
             if not name or name.lower() in ("ct", "terrorist", "t", "team a", "team b"):
@@ -325,21 +412,25 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
         pass
 
     try:
-        player_info = _rows(p.parse_ticks(
-            ["name", "steamid", "team_num", "team_name"], ticks=[match_start_tick]))
+        player_info = _rows(
+            p.parse_ticks(
+                ["name", "steamid", "team_num", "team_name"], ticks=[match_start_tick]
+            )
+        )
     except BaseException as exc:
         _raise_if_control_flow(exc)
         player_info = []
 
     # Side ground truth sampled shortly after each freeze ends.
-    round_side_ticks = sorted({
-        int(r["tick"]) + 16 for r in round_freeze_ends if int(r.get("tick") or 0) > 0
-    })
+    round_side_ticks = sorted(
+        {int(r["tick"]) + 16 for r in round_freeze_ends if int(r.get("tick") or 0) > 0}
+    )
     round_side_samples: list[dict] = []
     if round_side_ticks:
         try:
-            round_side_samples = _rows(p.parse_ticks(["steamid", "team_num"],
-                                                     ticks=round_side_ticks))
+            round_side_samples = _rows(
+                p.parse_ticks(["steamid", "team_num"], ticks=round_side_ticks)
+            )
         except BaseException as exc:
             _raise_if_control_flow(exc)
             round_side_samples = []
@@ -350,7 +441,9 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     stage_started = time.perf_counter()
     round_ends = g_round["round_end"]
     step = max(1, tickrate // max(1, sample_rate))
-    replay_ticks = _build_sample_ticks(round_ends, round_freeze_ends, g_round["round_start"], step)
+    replay_ticks = _build_sample_ticks(
+        round_ends, round_freeze_ends, g_round["round_start"], step
+    )
     replay_df = _safe_ticks_df(p, _REPLAY_PROPS, replay_ticks) if replay_ticks else None
     _record("parse.replayGrid", stage_started)
 
@@ -366,9 +459,15 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     if research:
         _p("duel windows (full tick)", 0.78)
         anchor_ticks = [int(r.get("tick") or 0) for r in deaths + hurts]
-        duel_windows = _merge_windows(anchor_ticks, round_ends, round_freeze_ends,
-                                      g_round["round_start"], tickrate,
-                                      window_before_ms, window_after_ms)
+        duel_windows = _merge_windows(
+            anchor_ticks,
+            round_ends,
+            round_freeze_ends,
+            g_round["round_start"],
+            tickrate,
+            window_before_ms,
+            window_after_ms,
+        )
         duel_ticks: list[int] = []
         for start, end in duel_windows:
             duel_ticks.extend(range(start, end + 1))
@@ -382,10 +481,22 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
     economy_raw: list[dict] = []
     if freeze_ticks:
         try:
-            economy_raw = _rows(p.parse_ticks(
-                ["steamid", "team_num", "cash_spent_this_round", "current_equip_value",
-                 "start_balance", "armor", "has_helmet", "has_defuser", "inventory"],
-                ticks=freeze_ticks))
+            economy_raw = _rows(
+                p.parse_ticks(
+                    [
+                        "steamid",
+                        "team_num",
+                        "cash_spent_this_round",
+                        "current_equip_value",
+                        "start_balance",
+                        "armor",
+                        "has_helmet",
+                        "has_defuser",
+                        "inventory",
+                    ],
+                    ticks=freeze_ticks,
+                )
+            )
         except BaseException as exc:
             _raise_if_control_flow(exc)
             economy_raw = []
@@ -433,6 +544,7 @@ def parse_demo(dem_path: str, *, sample_rate: int = 8, research: bool = False,
 
 # ── sampling grids ────────────────────────────────────────────────────────────
 
+
 def _freeze_by_round(round_freeze_ends: list[dict]) -> dict[int, int]:
     """total_rounds_played at round_freeze_end = N-1 for round N."""
     out: dict[int, int] = {}
@@ -454,9 +566,11 @@ def _round_starts_by_round(round_starts: list[dict]) -> dict[int, int]:
     return out
 
 
-def _round_spans(round_ends: list[dict],
-                 round_freeze_ends: list[dict],
-                 round_starts: list[dict] | None = None) -> list[tuple[int, int]]:
+def _round_spans(
+    round_ends: list[dict],
+    round_freeze_ends: list[dict],
+    round_starts: list[dict] | None = None,
+) -> list[tuple[int, int]]:
     """[(freeze_end_tick, event_end_tick)] for rounds with a valid window."""
     freeze = _freeze_by_round(round_freeze_ends)
     starts = _round_starts_by_round(round_starts or [])
@@ -472,9 +586,12 @@ def _round_spans(round_ends: list[dict],
     return spans
 
 
-def _build_sample_ticks(round_ends: list[dict], round_freeze_ends: list[dict],
-                        round_starts: list[dict],
-                        step: int) -> list[int]:
+def _build_sample_ticks(
+    round_ends: list[dict],
+    round_freeze_ends: list[dict],
+    round_starts: list[dict],
+    step: int,
+) -> list[int]:
     """Sorted unique sample ticks through the post-round tail."""
     ticks: list[int] = []
     for start_t, end_t in _round_spans(round_ends, round_freeze_ends, round_starts):
@@ -482,10 +599,15 @@ def _build_sample_ticks(round_ends: list[dict], round_freeze_ends: list[dict],
     return sorted(set(ticks))
 
 
-def _merge_windows(anchor_ticks: list[int], round_ends: list[dict],
-                   round_freeze_ends: list[dict], round_starts: list[dict],
-                   tickrate: int,
-                   before_ms: int, after_ms: int) -> list[tuple[int, int]]:
+def _merge_windows(
+    anchor_ticks: list[int],
+    round_ends: list[dict],
+    round_freeze_ends: list[dict],
+    round_starts: list[dict],
+    tickrate: int,
+    before_ms: int,
+    after_ms: int,
+) -> list[tuple[int, int]]:
     """Merged [start, end] full-tick combat windows, clamped to round spans."""
     spans = _round_spans(round_ends, round_freeze_ends, round_starts)
     if not spans or not anchor_ticks:
@@ -496,6 +618,7 @@ def _merge_windows(anchor_ticks: list[int], round_ends: list[dict],
     spans.sort()
     anchors = sorted(set(t for t in anchor_ticks if t > 0))
     import bisect
+
     starts = [s for s, _ in spans]
     for t in anchors:
         i = bisect.bisect_right(starts, t) - 1
@@ -520,6 +643,7 @@ def _merge_windows(anchor_ticks: list[int], round_ends: list[dict],
 
 # ── grenade trajectories ──────────────────────────────────────────────────────
 
+
 def _nearest_path(path: dict[int, tuple], t: int) -> tuple:
     if not path:
         return (0.0, 0.0, 0.0)
@@ -527,8 +651,9 @@ def _nearest_path(path: dict[int, tuple], t: int) -> tuple:
     return path[k]
 
 
-def _extract_grenade_paths(parser: DemoParser,
-                           sample_ticks: list[int]) -> tuple[list[dict], list[dict]]:
+def _extract_grenade_paths(
+    parser: DemoParser, sample_ticks: list[int]
+) -> tuple[list[dict], list[dict]]:
     """Throw origins + in-flight trajectories from parse_grenades().
 
     trajectories are sampled onto the replay grid for replay rendering:
@@ -545,7 +670,9 @@ def _extract_grenade_paths(parser: DemoParser,
         return [], []
     try:
         proj = g[g["grenade_type"].astype(str).str.endswith("Projectile")]
-        proj = proj.dropna(subset=["x", "y", "z"]).sort_values(["grenade_entity_id", "tick"])
+        proj = proj.dropna(subset=["x", "y", "z"]).sort_values(
+            ["grenade_entity_id", "tick"]
+        )
         if proj.empty:
             return [], []
         # Entity ids recycle; a new throw starts when the id changes or the
@@ -573,20 +700,24 @@ def _extract_grenade_paths(parser: DemoParser,
         throw_tick = int(row["tick"])
         last = int(last_tick.loc[seg_id])
         steamid = row.get("steamid")
-        throws.append({
-            "grenade_entity_id": int(eid_val) if eid_val is not None else None,
-            "grenade": gtype,
-            "tick": throw_tick,
-            "destroy_tick": last,
-            "steamid": steamid,
-            "X": float(row["x"]),
-            "Y": float(row["y"]),
-            "Z": float(row["z"]),
-        })
+        throws.append(
+            {
+                "grenade_entity_id": int(eid_val) if eid_val is not None else None,
+                "grenade": gtype,
+                "tick": throw_tick,
+                "destroy_tick": last,
+                "steamid": steamid,
+                "X": float(row["x"]),
+                "Y": float(row["y"]),
+                "Z": float(row["z"]),
+            }
+        )
 
         path = {
             int(t): (x, y, z)
-            for t, x, y, z in zip(seg_rows["tick"], seg_rows["x"], seg_rows["y"], seg_rows["z"])
+            for t, x, y, z in zip(
+                seg_rows["tick"], seg_rows["x"], seg_rows["y"], seg_rows["z"]
+            )
         }
         gticks = [t for t in grid if throw_tick <= t <= last]
         if not gticks:
@@ -601,19 +732,25 @@ def _extract_grenade_paths(parser: DemoParser,
             ys.append(int(round(pos[1])))
             zs.append(int(round(pos[2])))
         # Trim the stationary at-rest tail (smoke/decoy entities linger at rest).
-        while len(xs) >= 2 and (
-            (xs[-1] - xs[-2]) ** 2 + (ys[-1] - ys[-2]) ** 2 + (zs[-1] - zs[-2]) ** 2
-        ) <= 100:
+        while (
+            len(xs) >= 2
+            and (
+                (xs[-1] - xs[-2]) ** 2 + (ys[-1] - ys[-2]) ** 2 + (zs[-1] - zs[-2]) ** 2
+            )
+            <= 100
+        ):
             xs.pop()
             ys.pop()
             zs.pop()
-        trajectories.append({
-            "grenade": gtype,
-            "steamid": steamid,
-            "start_tick": gticks[0],
-            "xs": xs,
-            "ys": ys,
-            "zs": zs,
-        })
+        trajectories.append(
+            {
+                "grenade": gtype,
+                "steamid": steamid,
+                "start_tick": gticks[0],
+                "xs": xs,
+                "ys": ys,
+                "zs": zs,
+            }
+        )
 
     return throws, trajectories

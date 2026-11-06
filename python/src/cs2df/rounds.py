@@ -24,6 +24,7 @@ from .enums import normalize_round_end_reason
 
 # ── tiny helpers (duplicated from exporter to avoid circular import) ──────────
 
+
 def _sid(val) -> str | None:
     """Parse 17-digit SteamID64 from any demoparser2 representation."""
     if val is None or val == 0:
@@ -42,6 +43,7 @@ def _rn(row: dict) -> int:
 
 # ── round model ────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class _RoundWindow:
     round_number: int
@@ -56,10 +58,16 @@ class _RoundModel:
     side_map: dict[tuple[int, str], str]
     # Indexes built in __post_init__; events are resolved per-row across every
     # builder, so these turn O(rounds) scans into O(1)/O(log rounds) lookups.
-    _by_round: dict[int, _RoundWindow] = field(init=False, repr=False, default_factory=dict)
-    _event_end_by_round: dict[int, int] = field(init=False, repr=False, default_factory=dict)
+    _by_round: dict[int, _RoundWindow] = field(
+        init=False, repr=False, default_factory=dict
+    )
+    _event_end_by_round: dict[int, int] = field(
+        init=False, repr=False, default_factory=dict
+    )
     _sorted_starts: list[int] = field(init=False, repr=False, default_factory=list)
-    _sorted_windows: list[_RoundWindow] = field(init=False, repr=False, default_factory=list)
+    _sorted_windows: list[_RoundWindow] = field(
+        init=False, repr=False, default_factory=list
+    )
 
     def __post_init__(self) -> None:
         self._by_round = {w.round_number: w for w in self.windows}
@@ -91,7 +99,11 @@ class _RoundModel:
             return None
         window = self._sorted_windows[i]
         event_end = self.event_end_tick(window.round_number)
-        return window.round_number if event_end is not None and window.start_tick <= tick <= event_end else None
+        return (
+            window.round_number
+            if event_end is not None and window.start_tick <= tick <= event_end
+            else None
+        )
 
     def round_for_event(self, row: dict) -> int | None:
         tick = int(row.get("tick") or 0)
@@ -113,9 +125,8 @@ def _event_steamid(row: dict) -> str | None:
 
 # ── round builder ──────────────────────────────────────────────────────────────
 
-def build_rounds(
-    raw: dict, team_map: dict[str, str]
-) -> tuple[list[dict], _RoundModel]:
+
+def build_rounds(raw: dict, team_map: dict[str, str]) -> tuple[list[dict], _RoundModel]:
     """Return (rounds_list, side_map) from raw demoparser2 output.
 
     side_map[(roundNumber, teamKey)] = "t" | "ct"
@@ -209,21 +220,23 @@ def build_rounds(
 
         end_reason = normalize_round_end_reason(r.get("reason"))
 
-        out.append({
-            "roundNumber": n,
-            "startTick": s_tick,
-            "freezeEndTick": fz_tick,
-            "endTick": end_tick,
-            "teamASide": team_a_side,
-            "teamBSide": team_b_side,
-            "teamAScoreBefore": team_a_score,
-            "teamBScoreBefore": team_b_score,
-            "teamAEconomy": None,
-            "teamBEconomy": None,
-            "winnerTeamKey": winner_key,
-            "winnerSide": winner_side,
-            "endReason": end_reason,
-        })
+        out.append(
+            {
+                "roundNumber": n,
+                "startTick": s_tick,
+                "freezeEndTick": fz_tick,
+                "endTick": end_tick,
+                "teamASide": team_a_side,
+                "teamBSide": team_b_side,
+                "teamAScoreBefore": team_a_score,
+                "teamBScoreBefore": team_b_score,
+                "teamAEconomy": None,
+                "teamBEconomy": None,
+                "winnerTeamKey": winner_key,
+                "winnerSide": winner_side,
+                "endReason": end_reason,
+            }
+        )
         windows.append(_RoundWindow(n, s_tick, fz_tick, end_tick))
 
         if winner_key == "teamA":
@@ -242,6 +255,7 @@ def build_rounds(
 
 
 # ── side inference ─────────────────────────────────────────────────────────────
+
 
 def _sides_for_round(
     raw: dict,
@@ -278,7 +292,10 @@ def _sampled_side_for_round(
     freeze_end_tick: int | None,
 ) -> tuple[str, str] | None:
     expected_tick = (freeze_end_tick or 0) + 16
-    counts: dict[str, dict[str, int]] = {"teamA": {"t": 0, "ct": 0}, "teamB": {"t": 0, "ct": 0}}
+    counts: dict[str, dict[str, int]] = {
+        "teamA": {"t": 0, "ct": 0},
+        "teamB": {"t": 0, "ct": 0},
+    }
 
     for row in raw.get("round_side_samples", []):
         tick = int(row.get("tick") or 0)
@@ -320,7 +337,10 @@ def _majority_side(side_counts: dict[str, int]) -> str | None:
 
 
 def _starting_side_by_team(raw: dict, team_map: dict[str, str]) -> dict[str, str]:
-    counts: dict[str, dict[str, int]] = {"teamA": {"t": 0, "ct": 0}, "teamB": {"t": 0, "ct": 0}}
+    counts: dict[str, dict[str, int]] = {
+        "teamA": {"t": 0, "ct": 0},
+        "teamB": {"t": 0, "ct": 0},
+    }
     for row in raw.get("player_info", []):
         sid = _sid(row.get("steamid"))
         key = team_map.get(sid or "")

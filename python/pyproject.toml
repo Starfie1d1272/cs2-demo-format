@@ -29,4 +29,7 @@ build-backend = "hatchling.build"
 packages = ["src/cs2df"]
 
 [dependency-groups]
-dev = ["pytest>=9.1.1"]
+dev = [
+    "pytest>=9.1.1",
+    "ruff==0.17.4",
+]

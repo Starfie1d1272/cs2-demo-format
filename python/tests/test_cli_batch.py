@@ -29,10 +29,12 @@ def test_export_one_report_converts_native_failures(monkeypatch, tmp_path):
 
 
 def test_write_unique_zip_does_not_overwrite_descriptive_collisions(tmp_path):
-    first = cli._write_unique_zip(tmp_path, "2026-06-12_de_mirage_A-vs-B_13-11.zip",
-                                  "match-one", b"first")
-    second = cli._write_unique_zip(tmp_path, "2026-06-12_de_mirage_A-vs-B_13-11.zip",
-                                   "match-two", b"second")
+    first = cli._write_unique_zip(
+        tmp_path, "2026-06-12_de_mirage_A-vs-B_13-11.zip", "match-one", b"first"
+    )
+    second = cli._write_unique_zip(
+        tmp_path, "2026-06-12_de_mirage_A-vs-B_13-11.zip", "match-two", b"second"
+    )
 
     assert first.name == "2026-06-12_de_mirage_A-vs-B_13-11.zip"
     assert second.name == "2026-06-12_de_mirage_A-vs-B_13-11_match-two.zip"
@@ -62,7 +64,9 @@ def test_export_one_report_keeps_plain_batch_overwrite(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cs2df.package, "export_demo", export)
 
-    row = cli._export_one_report(str(dem), str(tmp_path), {"compress_level": 3}, descriptive=False)
+    row = cli._export_one_report(
+        str(dem), str(tmp_path), {"compress_level": 3}, descriptive=False
+    )
 
     assert row["ok"] is True
     assert row["zip"] == "match.zip"
@@ -101,7 +105,9 @@ def test_future_failure_is_reported_as_batch_row(tmp_path):
     dem.write_bytes(b"x")
     started = 0.0
 
-    row = cli._failed_batch_row(dem, started, cli._format_exception(RuntimeError("worker died")))
+    row = cli._failed_batch_row(
+        dem, started, cli._format_exception(RuntimeError("worker died"))
+    )
 
     assert row["ok"] is False
     assert row["zip"] is None

@@ -26,7 +26,10 @@
     "typecheck": "tsc --noEmit",
     "check:versions": "python3 tools/check_versions.py",
     "gen:schema": "tsx scripts/gen-json-schema.ts",
-    "validate:fixtures": "tsx scripts/validate-fixtures.ts"
+    "validate:fixtures": "tsx scripts/validate-fixtures.ts",
+    "format": "prettier --write \"{parser,schemas,scripts}/**/*.{ts,js,mjs,cjs}\" --ignore-unknown",
+    "format:check": "prettier --check \"{parser,schemas,scripts}/**/*.{ts,js,mjs,cjs}\" --ignore-unknown",
+    "lint": "biome lint parser schemas scripts --diagnostic-level=error"
   },
   "keywords": [
     "cs2",
@@ -40,8 +43,10 @@
     "jszip": "^3.10.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.5",
     "@changesets/cli": "^3.0.3",
     "@types/node": "^26.6.4",
+    "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "zod": "^4.6.5"

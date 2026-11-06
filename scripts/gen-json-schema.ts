@@ -8,29 +8,29 @@
  * Run: pnpm gen:schema
  */
 
-import { z } from "zod";
-import { writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { SCHEMAS_BY_KEY, manifestSchema } from "../schemas/index.js";
+import { z } from 'zod';
+import { writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { SCHEMAS_BY_KEY, manifestSchema } from '../schemas/index.js';
 
-const specDir = join(process.cwd(), "spec");
+const specDir = join(process.cwd(), 'spec');
 
 mkdirSync(specDir, { recursive: true });
 
 const entries: Array<[string, z.ZodType]> = [
-  ["manifest", manifestSchema],
+  ['manifest', manifestSchema],
   ...Object.entries(SCHEMAS_BY_KEY),
 ];
 
 for (const [key, schema] of entries) {
   const jsonSchema = z.toJSONSchema(schema, {
-    target: "draft-7",
+    target: 'draft-7',
     // The wire contract validates input before Zod fills default values.
-    io: "input",
+    io: 'input',
   });
 
   const outPath = join(specDir, `${key}.schema.json`);
-  writeFileSync(outPath, JSON.stringify(jsonSchema, null, 2) + "\n");
+  writeFileSync(outPath, JSON.stringify(jsonSchema, null, 2) + '\n');
   console.log(`  wrote ./spec/${key}.schema.json`);
 }
 

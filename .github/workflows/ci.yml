@@ -25,6 +25,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - run: pnpm format:check
+
+      - run: pnpm lint
+
       - run: pnpm check:versions
 
       - run: pnpm gen:schema
@@ -51,5 +55,9 @@ jobs:
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
 
       - run: uv sync --dev --locked --no-config --default-index https://pypi.org/simple
+
+      - run: uv run --locked --no-config --default-index https://pypi.org/simple ruff format --check src tests ../tools
+
+      - run: uv run --locked --no-config --default-index https://pypi.org/simple ruff check src tests ../tools
 
       - run: uv run --locked --no-config --default-index https://pypi.org/simple pytest

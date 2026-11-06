@@ -30,13 +30,19 @@ def _replay_row(tick: int) -> dict:
 
 
 def test_replay_round_extends_to_sample_before_next_round_start():
-    players = PlayerDirectory([
-        {"steamId64": "76561198000000001", "name": "p1", "teamKey": "teamA"},
-    ])
+    players = PlayerDirectory(
+        [
+            {"steamId64": "76561198000000001", "name": "p1", "teamKey": "teamA"},
+        ]
+    )
     round_model = _RoundModel(
         windows=[
-            _RoundWindow(round_number=1, start_tick=50, freeze_end_tick=100, end_tick=200),
-            _RoundWindow(round_number=2, start_tick=300, freeze_end_tick=360, end_tick=460),
+            _RoundWindow(
+                round_number=1, start_tick=50, freeze_end_tick=100, end_tick=200
+            ),
+            _RoundWindow(
+                round_number=2, start_tick=300, freeze_end_tick=360, end_tick=460
+            ),
         ],
         side_map={},
     )
@@ -49,19 +55,28 @@ def test_replay_round_extends_to_sample_before_next_round_start():
 
     assert replay is not None
     first_round = replay["rounds"][0]
-    last_tick = first_round["startTick"] + (first_round["frameCount"] - 1) * first_round["tickStep"]
+    last_tick = (
+        first_round["startTick"]
+        + (first_round["frameCount"] - 1) * first_round["tickStep"]
+    )
     assert last_tick == 292
     assert last_tick < 300
 
 
 def test_replay_marks_round_start_bomb_carrier_from_inventory():
-    players = PlayerDirectory([
-        {"steamId64": "76561198000000001", "name": "p1", "teamKey": "teamA"},
-    ])
+    players = PlayerDirectory(
+        [
+            {"steamId64": "76561198000000001", "name": "p1", "teamKey": "teamA"},
+        ]
+    )
     round_model = _RoundModel(
         windows=[
-            _RoundWindow(round_number=1, start_tick=50, freeze_end_tick=100, end_tick=200),
-            _RoundWindow(round_number=2, start_tick=300, freeze_end_tick=360, end_tick=460),
+            _RoundWindow(
+                round_number=1, start_tick=50, freeze_end_tick=100, end_tick=200
+            ),
+            _RoundWindow(
+                round_number=2, start_tick=300, freeze_end_tick=360, end_tick=460
+            ),
         ],
         side_map={},
     )

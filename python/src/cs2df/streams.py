@@ -11,14 +11,13 @@ stored[i] = v[i] − v[i−1]; implemented as np.diff(v, prepend=0).
 
 from __future__ import annotations
 
-from typing import Any
 
 from .enums import classify_inventory, normalize_weapon_name
 from .events import PlayerDirectory, _sid
 from .rounds import _RoundModel
 
 ANGLE_SCALE = 10  # stored angle = degrees * 10 (0.1° resolution)
-COORD_SCALE = 1   # game units, rounded to int
+COORD_SCALE = 1  # game units, rounded to int
 FLAG_ALIVE = 1
 FLAG_HAS_BOMB = 2
 FLAG_HAS_DEFUSE_KIT = 4
@@ -51,13 +50,17 @@ def _delta(arr) -> list[int]:
 
 def _prep_frame_df(df, players: PlayerDirectory):
     """Common normalization: sid → playerIndex column, sorted by tick."""
-    import numpy as np
     import pandas as pd
 
     if df is None or len(df) == 0:
         return None
     df = df.copy()
-    sid = pd.to_numeric(df["steamid"], errors="coerce").fillna(0).astype("int64").astype(str)
+    sid = (
+        pd.to_numeric(df["steamid"], errors="coerce")
+        .fillna(0)
+        .astype("int64")
+        .astype(str)
+    )
     pidx = sid.map(players.index_by_sid)
     df["_pidx"] = pidx
     df = df[df["_pidx"].notna()]
@@ -87,8 +90,14 @@ def _slice_by_tick(df, tick_values, start: int, end: int):
 
 # ── replay.json ───────────────────────────────────────────────────────────────
 
-def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
-                 tickrate: int, sample_rate: int) -> dict | None:
+
+def build_replay(
+    raw: dict,
+    players: PlayerDirectory,
+    round_model: _RoundModel,
+    tickrate: int,
+    sample_rate: int,
+) -> dict | None:
     import numpy as np
 
     df = _prep_frame_df(raw.get("replay_df"), players)
@@ -112,10 +121,14 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
     }
     df["_plidx"] = df["last_place_name"].map(place_map).fillna(-1).astype("int64")
     if "inventory" in df.columns:
-        df["_grenades"] = df["inventory"].map(lambda items: classify_inventory(items)[3])
+        df["_grenades"] = df["inventory"].map(
+            lambda items: classify_inventory(items)[3]
+        )
         df["_has_bomb"] = df["inventory"].map(
-            lambda items: isinstance(items, (list, tuple))
-            and any(normalize_weapon_name(item) == "c4" for item in items)
+            lambda items: (
+                isinstance(items, (list, tuple))
+                and any(normalize_weapon_name(item) == "c4" for item in items)
+            )
         )
     else:
         df["_grenades"] = [[] for _ in range(len(df))]
@@ -129,14 +142,16 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
         rn = round_model.round_for_tick(start)
         if rn is None:
             continue
-        proj_by_round.setdefault(rn, []).append({
-            "grenade": tr["grenade"],
-            "throwerIndex": players.idx(_sid(tr.get("steamid"))),
-            "startTick": start,
-            "x": _delta([int(v) for v in tr["xs"]]),
-            "y": _delta([int(v) for v in tr["ys"]]),
-            "z": _delta([int(v) for v in tr["zs"]]),
-        })
+        proj_by_round.setdefault(rn, []).append(
+            {
+                "grenade": tr["grenade"],
+                "throwerIndex": players.idx(_sid(tr.get("steamid"))),
+                "startTick": start,
+                "x": _delta([int(v) for v in tr["xs"]]),
+                "y": _delta([int(v) for v in tr["ys"]]),
+                "z": _delta([int(v) for v in tr["zs"]]),
+            }
+        )
 
     rounds_out: list[dict] = []
     windows = sorted(round_model.windows, key=lambda w: w.round_number)
@@ -156,14 +171,16 @@ def build_replay(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
                 player_tracks.append(track)
         if not player_tracks:
             continue
-        rounds_out.append({
-            "roundNumber": w.round_number,
-            "startTick": int(grid[0]),
-            "tickStep": step,
-            "frameCount": int(len(grid)),
-            "players": player_tracks,
-            "projectiles": proj_by_round.get(w.round_number, []),
-        })
+        rounds_out.append(
+            {
+                "roundNumber": w.round_number,
+                "startTick": int(grid[0]),
+                "tickStep": step,
+                "frameCount": int(len(grid)),
+                "players": player_tracks,
+                "projectiles": proj_by_round.get(w.round_number, []),
+            }
+        )
 
     if not rounds_out:
         return None
@@ -204,14 +221,24 @@ def _player_track(g, grid, pidx: int) -> dict | None:
     z = col_ffill("Z")
     yaw = col_ffill("yaw", ANGLE_SCALE)
     pitch = col_ffill("pitch", ANGLE_SCALE)
-    money = col_ffill("balance") if "balance" in aligned.columns else np.zeros(len(grid), dtype="int64")
+    money = (
+        col_ffill("balance")
+        if "balance" in aligned.columns
+        else np.zeros(len(grid), dtype="int64")
+    )
     equip = col_ffill("current_equip_value")
 
     hp = np.round(_num(aligned["health"], 0.0).to_numpy()).astype("int64").clip(0, 100)
     hp = np.where(present, hp, 0)
-    armor = np.round(_num(aligned["armor"], 0.0).to_numpy()).astype("int64").clip(0, 100)
+    armor = (
+        np.round(_num(aligned["armor"], 0.0).to_numpy()).astype("int64").clip(0, 100)
+    )
     armor = np.where(present, armor, 0)
-    flash = np.round(_num(aligned["flash_duration"], 0.0).to_numpy() * 10).astype("int64").clip(0, 60)
+    flash = (
+        np.round(_num(aligned["flash_duration"], 0.0).to_numpy() * 10)
+        .astype("int64")
+        .clip(0, 60)
+    )
     flash = np.where(present, flash, 0)
     widx = aligned["_widx"].fillna(-1).astype("int64").to_numpy()
     widx = np.where(present, widx, -1)
@@ -223,14 +250,19 @@ def _player_track(g, grid, pidx: int) -> dict | None:
     has_kit = _num(aligned["has_defuser"], 0.0).to_numpy().astype(bool)
     has_bomb = aligned["_has_bomb"].fillna(False).to_numpy().astype(bool)
     has_bomb = has_bomb & present & (alive == 1)
-    flags = (alive * FLAG_ALIVE
-             + has_bomb.astype("int64") * FLAG_HAS_BOMB
-             + (has_kit & present & (alive == 1)).astype("int64") * FLAG_HAS_DEFUSE_KIT)
+    flags = (
+        alive * FLAG_ALIVE
+        + has_bomb.astype("int64") * FLAG_HAS_BOMB
+        + (has_kit & present & (alive == 1)).astype("int64") * FLAG_HAS_DEFUSE_KIT
+    )
 
     return {
         "playerIndex": pidx,
-        "x": _delta(x), "y": _delta(y), "z": _delta(z),
-        "yaw": _delta(yaw), "pitch": _delta(pitch),
+        "x": _delta(x),
+        "y": _delta(y),
+        "z": _delta(z),
+        "yaw": _delta(yaw),
+        "pitch": _delta(pitch),
         "hp": hp.tolist(),
         "armor": armor.tolist(),
         "money": _delta(money),
@@ -259,9 +291,17 @@ def _align_grenades(aligned, present) -> list[list[str]]:
 
 # ── duels.json ────────────────────────────────────────────────────────────────
 
-def build_duels(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
-                tickrate: int, kills_list: list[dict], damages_list: list[dict],
-                window_before_ms: int, window_after_ms: int) -> dict | None:
+
+def build_duels(
+    raw: dict,
+    players: PlayerDirectory,
+    round_model: _RoundModel,
+    tickrate: int,
+    kills_list: list[dict],
+    damages_list: list[dict],
+    window_before_ms: int,
+    window_after_ms: int,
+) -> dict | None:
     import numpy as np
 
     df = _prep_frame_df(raw.get("duel_df"), players)
@@ -272,13 +312,23 @@ def build_duels(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
     # anchors grouped per merged window
     anchors_all: list[dict] = []
     for k in kills_list:
-        anchors_all.append({"kind": "kill", "tick": k["tick"],
-                            "attackerIndex": k["killerIndex"],
-                            "victimIndex": k["victimIndex"]})
+        anchors_all.append(
+            {
+                "kind": "kill",
+                "tick": k["tick"],
+                "attackerIndex": k["killerIndex"],
+                "victimIndex": k["victimIndex"],
+            }
+        )
     for d in damages_list:
-        anchors_all.append({"kind": "damage", "tick": d["tick"],
-                            "attackerIndex": d["attackerIndex"],
-                            "victimIndex": d["victimIndex"]})
+        anchors_all.append(
+            {
+                "kind": "damage",
+                "tick": d["tick"],
+                "attackerIndex": d["attackerIndex"],
+                "victimIndex": d["victimIndex"],
+            }
+        )
     anchors_all.sort(key=lambda a: a["tick"])
     tick_values = df["tick"].to_numpy()
 
@@ -301,14 +351,16 @@ def build_duels(raw: dict, players: PlayerDirectory, round_model: _RoundModel,
                 tracks.append(track)
         if not tracks:
             continue
-        out_windows.append({
-            "roundNumber": rn,
-            "startTick": int(start),
-            "tickStep": 1,
-            "frameCount": int(len(grid)),
-            "anchors": anchors,
-            "players": tracks,
-        })
+        out_windows.append(
+            {
+                "roundNumber": rn,
+                "startTick": int(start),
+                "tickStep": 1,
+                "frameCount": int(len(grid)),
+                "anchors": anchors,
+                "players": tracks,
+            }
+        )
 
     if not out_windows:
         return None
@@ -340,7 +392,11 @@ def _duel_track(g, grid, pidx: int) -> dict | None:
 
     hp = np.round(_num(aligned["health"], 0.0).to_numpy()).astype("int64").clip(0, 100)
     hp = np.where(present, hp, 0)
-    flash = np.round(_num(aligned["flash_duration"], 0.0).to_numpy() * 10).astype("int64").clip(0, 60)
+    flash = (
+        np.round(_num(aligned["flash_duration"], 0.0).to_numpy() * 10)
+        .astype("int64")
+        .clip(0, 60)
+    )
     flash = np.where(present, flash, 0)
 
     return {
@@ -357,7 +413,10 @@ def _duel_track(g, grid, pidx: int) -> dict | None:
 
 # ── shots.json ────────────────────────────────────────────────────────────────
 
-def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -> dict | None:
+
+def build_shots(
+    raw: dict, players: PlayerDirectory, round_model: _RoundModel
+) -> dict | None:
     """Columnar weapon-fire tracks grouped by (roundNumber, playerIndex).
 
     Velocity is not available via weapon_fire event player extras in
@@ -381,7 +440,11 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
         vy_arr = vel_df["velocity_Y"].values
         vz_arr = vel_df["velocity_Z"].values
         for pi_np, tick_np, vx_np, vy_np, vz_np in zip(
-            pidx_arr, tick_arr, vx_arr, vy_arr, vz_arr,
+            pidx_arr,
+            tick_arr,
+            vx_arr,
+            vy_arr,
+            vz_arr,
         ):
             # NaN → data unavailable; skip so lookup falls through to sentinel (0,0,0).
             if np.isnan(vx_np) or np.isnan(vy_np) or np.isnan(vz_np):
@@ -404,7 +467,9 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
         n = _active_event_round_number(round_model, r)
         if n is None:
             continue
-        idx = players.idx(_sid(r.get("user_steamid") or r.get("steamid") or r.get("userid")))
+        idx = players.idx(
+            _sid(r.get("user_steamid") or r.get("steamid") or r.get("userid"))
+        )
         if idx is None:
             continue
         weapon = str(r.get("weapon") or "")
@@ -434,20 +499,22 @@ def build_shots(raw: dict, players: PlayerDirectory, round_model: _RoundModel) -
             vy_vals.append(vy)
             vz_vals.append(vz)
 
-        tracks.append({
-            "roundNumber": rn,
-            "playerIndex": idx,
-            "tick": _delta([int(r.get("tick") or 0) for r in rows]),
-            "weapon": [weapon_dict.index(str(r.get("weapon"))) for r in rows],
-            "x": _delta(col("user_X")),
-            "y": _delta(col("user_Y")),
-            "z": _delta(col("user_Z")),
-            "vx": vx_vals,
-            "vy": vy_vals,
-            "vz": vz_vals,
-            "yaw": _delta(col("user_yaw", ANGLE_SCALE)),
-            "pitch": _delta(col("user_pitch", ANGLE_SCALE)),
-        })
+        tracks.append(
+            {
+                "roundNumber": rn,
+                "playerIndex": idx,
+                "tick": _delta([int(r.get("tick") or 0) for r in rows]),
+                "weapon": [weapon_dict.index(str(r.get("weapon"))) for r in rows],
+                "x": _delta(col("user_X")),
+                "y": _delta(col("user_Y")),
+                "z": _delta(col("user_Z")),
+                "vx": vx_vals,
+                "vy": vy_vals,
+                "vz": vz_vals,
+                "yaw": _delta(col("user_yaw", ANGLE_SCALE)),
+                "pitch": _delta(col("user_pitch", ANGLE_SCALE)),
+            }
+        )
 
     return {
         "meta": {"coordScale": COORD_SCALE, "angleScale": ANGLE_SCALE},
