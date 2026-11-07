@@ -2,3 +2,7 @@ allowBuilds:
   esbuild: true
 frozenLockfile: true
 verifyDepsBeforeRun: error
+# Keep affected transitive development dependencies on patched releases.
+overrides:
+  esbuild@>=0.27.3 <0.28.1: 0.28.1
+  launch-editor@<2.14.2: 2.14.2
