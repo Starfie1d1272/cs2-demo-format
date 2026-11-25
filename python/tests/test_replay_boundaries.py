@@ -83,8 +83,8 @@ def test_replay_marks_round_start_bomb_carrier_from_inventory():
 
 def test_parse_replay_ticks_include_post_round_tail_before_next_start():
     round_ends = [
-        {"total_rounds_played": 1, "tick": 200},
-        {"total_rounds_played": 2, "tick": 460},
+        {"total_rounds_played": 1, "tick": 200, "winner": "t"},
+        {"total_rounds_played": 2, "tick": 460, "winner": "ct"},
     ]
     round_freeze_ends = [
         {"total_rounds_played": 0, "tick": 100},

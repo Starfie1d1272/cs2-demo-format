@@ -48,6 +48,7 @@ class _RoundWindow:
     start_tick: int
     freeze_end_tick: int
     end_tick: int
+    next_start_tick: int | None = None
 
 
 @dataclass
@@ -69,6 +70,8 @@ class _RoundModel:
         self._event_end_by_round = {}
         for i, window in enumerate(ordered):
             next_start = ordered[i + 1].start_tick if i + 1 < len(ordered) else None
+            if next_start is not None and window.next_start_tick is not None:
+                next_start = min(next_start, window.next_start_tick)
             self._event_end_by_round[window.round_number] = (
                 next_start - 1 if next_start is not None else window.end_tick
             )
@@ -113,9 +116,60 @@ def _event_steamid(row: dict) -> str | None:
 
 # ── round builder ──────────────────────────────────────────────────────────────
 
-def build_rounds(
-    raw: dict, team_map: dict[str, str]
-) -> tuple[list[dict], _RoundModel]:
+
+def _resolve_round_attempts(
+    round_starts: list[dict], round_freeze_ends: list[dict], round_ends: list[dict]
+) -> list[tuple[_RoundWindow, dict, str]]:
+    """Pair scoring ends with their own start and freeze-end in tick order."""
+    markers = [
+        (int(row.get("tick") or 0), kind, row)
+        for kind, rows in enumerate((round_starts, round_freeze_ends, round_ends))
+        for row in rows
+        if int(row.get("tick") or 0) > 0
+    ]
+    markers.sort(key=lambda marker: (marker[0], marker[1]))
+    demo_starts = [tick for tick, kind, _ in markers if kind == 0]
+    starts: dict[int, int] = {}
+    freezes: dict[int, int] = {}
+    completed: dict[int, tuple[_RoundWindow, dict, str]] = {}
+    for tick, kind, row in markers:
+        number = _rn(row) + (kind != 2)
+        if number <= 0:
+            continue
+        if kind == 0:
+            if starts.get(number) == tick:
+                continue
+            # A start at an already-scored round invalidates that score and
+            # the rest of the old timeline from that round onward.
+            for rolled_back in [n for n in completed if n >= number]:
+                del completed[rolled_back]
+                starts.pop(rolled_back, None)
+                freezes.pop(rolled_back, None)
+            starts[number] = tick
+            freezes.pop(number, None)
+        elif kind == 1:
+            freezes[number] = tick
+        else:
+            winner = str(row.get("winner") or "").lower()
+            if winner not in ("t", "2", "ct", "3"):
+                # Restart markers can report the previous completed round
+                # number even though they do not represent a scoring end.
+                continue
+            freeze = freezes.get(number, 0)
+            if tick <= freeze:
+                continue
+            next_index = bisect.bisect_right(demo_starts, tick)
+            next_start = (
+                demo_starts[next_index] if next_index < len(demo_starts) else None
+            )
+            window = _RoundWindow(
+                number, starts.get(number, 0), freeze, tick, next_start
+            )
+            completed[number] = (window, row, "t" if winner in ("t", "2") else "ct")
+    return [completed[number] for number in sorted(completed)]
+
+
+def build_rounds(raw: dict, team_map: dict[str, str]) -> tuple[list[dict], _RoundModel]:
     """Return (rounds_list, side_map) from raw demoparser2 output.
 
     side_map[(roundNumber, teamKey)] = "t" | "ct"
@@ -124,119 +178,50 @@ def build_rounds(
     (rounds completed so far), so we store at actual_round = n + 1.
     total_rounds_played at round_end = N (the round that just completed).
     """
-    freeze_tick: dict[int, int] = {}
-    for r in raw.get("round_freeze_ends", []):
-        n = _rn(r)
-        t = int(r.get("tick") or 0)
-        actual_round = n + 1
-        if actual_round > 0 and t > 0:
-            freeze_tick[actual_round] = t
-
-    start_tick: dict[int, int] = {}
-    for r in raw.get("round_starts", []):
-        n = _rn(r)
-        t = int(r.get("tick") or 0)
-        actual_round = n + 1
-        if actual_round > 0 and t > 0 and actual_round not in start_tick:
-            start_tick[actual_round] = t
-
     team_a_score = 0
     team_b_score = 0
     out: list[dict] = []
     side_map: dict[tuple[int, str], str] = {}
     windows: list[_RoundWindow] = []
 
-    # A single round can emit multiple round_end events (e.g. a bogus warmup /
-    # restart end fired before the real one). Keep only the latest-tick end per
-    # round number so the same round is never counted twice.
-    best_by_round: dict[int, dict] = {}
-    for r in raw.get("round_ends", []):
-        n = _rn(r)
-        if n <= 0:
-            continue
-        prev = best_by_round.get(n)
-        if prev is None or int(r.get("tick") or 0) > int(prev.get("tick") or 0):
-            best_by_round[n] = r
-    round_ends_sorted = [best_by_round[n] for n in sorted(best_by_round)]
-
-    for r in round_ends_sorted:
-        n = _rn(r)
-        if n <= 0:
-            continue
-
-        end_tick = int(r.get("tick") or 0)
-        s_tick = start_tick.get(n, 0)
-        fz_tick = freeze_tick.get(n, 0)
-
-        # A real round must end after its own freeze period; an end at or before
-        # freeze-end is a bogus warmup/restart event — drop it (don't score it).
-        if fz_tick > 0 and 0 < end_tick <= fz_tick:
-            continue
-
+    attempts = _resolve_round_attempts(
+        raw.get("round_starts", []),
+        raw.get("round_freeze_ends", []),
+        raw.get("round_ends", []),
+    )
+    for window, end, winner_side in attempts:
+        n = window.round_number
+        fz_tick = window.freeze_end_tick
         team_a_side, team_b_side = _sides_for_round(raw, team_map, n, fz_tick)
         side_map[(n, "teamA")] = team_a_side
         side_map[(n, "teamB")] = team_b_side
+        winner_key = "teamA" if team_a_side == winner_side else "teamB"
 
-        # v2: startTick, freezeEndTick, endTick must all be >= 1
-        if s_tick <= 0 or fz_tick <= 0 or end_tick <= 0:
-            winner_raw = str(r.get("winner") or "").lower()
-            if winner_raw in ("t", "2"):
-                winner_key = "teamA" if team_a_side == "t" else "teamB"
-            elif winner_raw in ("ct", "3"):
-                winner_key = "teamA" if team_a_side == "ct" else "teamB"
-            else:
-                winner_key = None
-
-            if winner_key == "teamA":
-                team_a_score += 1
-            elif winner_key == "teamB":
-                team_b_score += 1
-            continue
-
-        winner_raw = str(r.get("winner") or "").lower()
-        if winner_raw in ("t", "2"):
-            winner_side = "t"
-            winner_key = "teamA" if team_a_side == "t" else "teamB"
-        elif winner_raw in ("ct", "3"):
-            winner_side = "ct"
-            winner_key = "teamA" if team_a_side == "ct" else "teamB"
-        else:
-            winner_side = None
-            winner_key = None
-
-        if not winner_key or not winner_side:
-            continue
-
-        end_reason = normalize_round_end_reason(r.get("reason"))
-
-        out.append({
-            "roundNumber": n,
-            "startTick": s_tick,
-            "freezeEndTick": fz_tick,
-            "endTick": end_tick,
-            "teamASide": team_a_side,
-            "teamBSide": team_b_side,
-            "teamAScoreBefore": team_a_score,
-            "teamBScoreBefore": team_b_score,
-            "teamAEconomy": None,
-            "teamBEconomy": None,
-            "winnerTeamKey": winner_key,
-            "winnerSide": winner_side,
-            "endReason": end_reason,
-        })
-        windows.append(_RoundWindow(n, s_tick, fz_tick, end_tick))
+        # Keep the score for partial recordings even if a round has no window.
+        if window.start_tick > 0 and fz_tick > 0:
+            out.append(
+                {
+                    "roundNumber": n,
+                    "startTick": window.start_tick,
+                    "freezeEndTick": fz_tick,
+                    "endTick": window.end_tick,
+                    "teamASide": team_a_side,
+                    "teamBSide": team_b_side,
+                    "teamAScoreBefore": team_a_score,
+                    "teamBScoreBefore": team_b_score,
+                    "teamAEconomy": "semi",
+                    "teamBEconomy": "semi",
+                    "winnerTeamKey": winner_key,
+                    "winnerSide": winner_side,
+                    "endReason": normalize_round_end_reason(end.get("reason")),
+                }
+            )
+            windows.append(window)
 
         if winner_key == "teamA":
             team_a_score += 1
-        elif winner_key == "teamB":
+        else:
             team_b_score += 1
-
-    # Replace any None economy with "semi"
-    for rd in out:
-        if rd["teamAEconomy"] is None:
-            rd["teamAEconomy"] = "semi"
-        if rd["teamBEconomy"] is None:
-            rd["teamBEconomy"] = "semi"
 
     return out, _RoundModel(windows=windows, side_map=side_map)
 
