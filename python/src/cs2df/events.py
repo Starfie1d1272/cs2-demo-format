@@ -338,7 +338,7 @@ def build_damages(
     remaining_health: dict[tuple[int, int], int] = defaultdict(lambda: 100)
 
     for r in sorted(raw.get("hurts", []), key=lambda row: int(row.get("tick") or 0)):
-        n = round_model.round_for_event(r)
+        n = _active_event_round_number(round_model, r)
         if n is None:
             continue
         vic_sid = _sid(r.get("user_steamid"))
@@ -396,7 +396,7 @@ def build_blinds(
     flash_lookup = flash_lookup or {}
     out = []
     for r in raw.get("blinds", []):
-        n = round_model.round_for_event(r)
+        n = _active_event_round_number(round_model, r)
         if n is None:
             continue
         flasher_sid = _sid(r.get("attacker_steamid"))

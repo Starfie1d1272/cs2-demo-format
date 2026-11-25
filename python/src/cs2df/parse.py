@@ -25,6 +25,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Callable
 
+from .rounds import _resolve_round_attempts
+
 if TYPE_CHECKING:
     import pandas as pd
     from demoparser2 import DemoParser  # type: ignore
@@ -545,45 +547,23 @@ def parse_demo(
 # ── sampling grids ────────────────────────────────────────────────────────────
 
 
-def _freeze_by_round(round_freeze_ends: list[dict]) -> dict[int, int]:
-    """total_rounds_played at round_freeze_end = N-1 for round N."""
-    out: dict[int, int] = {}
-    for r in round_freeze_ends:
-        rn = int(r.get("total_rounds_played") or 0) + 1
-        t = int(r.get("tick") or 0)
-        if rn > 0 and t > 0:
-            out[rn] = t
-    return out
-
-
-def _round_starts_by_round(round_starts: list[dict]) -> dict[int, int]:
-    out: dict[int, int] = {}
-    for r in round_starts:
-        rn = int(r.get("total_rounds_played") or 0) + 1
-        t = int(r.get("tick") or 0)
-        if rn > 0 and t > 0 and rn not in out:
-            out[rn] = t
-    return out
-
-
 def _round_spans(
     round_ends: list[dict],
     round_freeze_ends: list[dict],
-    round_starts: list[dict] | None = None,
+    round_starts: list[dict],
 ) -> list[tuple[int, int]]:
     """[(freeze_end_tick, event_end_tick)] for rounds with a valid window."""
-    freeze = _freeze_by_round(round_freeze_ends)
-    starts = _round_starts_by_round(round_starts or [])
-    spans: list[tuple[int, int]] = []
-    for r in round_ends:
-        rn = int(r.get("total_rounds_played") or 0)
-        end_t = int(r.get("tick") or 0)
-        next_start_t = starts.get(rn + 1)
-        event_end_t = next_start_t - 1 if next_start_t is not None else end_t
-        start_t = freeze.get(rn, 0)
-        if start_t > 0 and event_end_t > start_t:
-            spans.append((start_t, event_end_t))
-    return spans
+    attempts = _resolve_round_attempts(round_starts, round_freeze_ends, round_ends)
+    return [
+        (
+            window.freeze_end_tick,
+            window.next_start_tick - 1
+            if window.next_start_tick is not None and index < len(attempts) - 1
+            else window.end_tick,
+        )
+        for index, (window, _, _) in enumerate(attempts)
+        if window.freeze_end_tick > 0
+    ]
 
 
 def _build_sample_ticks(
