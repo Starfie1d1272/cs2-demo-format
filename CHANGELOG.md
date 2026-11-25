@@ -3,6 +3,14 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 3.1.1 — 2026-11-26
+
+### Fixed
+
+- Preserve completed rounds when a server restarts or restores a round.
+  Keep the scoring attempt and omit events from abandoned attempts.
+- Require demoparser2 0.42.2 or newer for affected Perfect World recordings.
+
 ## 3.1.0 — 2026-06-21
 
 ### Added
