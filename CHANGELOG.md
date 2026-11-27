@@ -3,11 +3,18 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
-## Unreleased
+## 4.0.0 — 2026-11-28
+
+### Breaking Changes
+
+- **原生 Zod 4 与工具链升级**：`schemas/` 迁移至原生 Zod 4，`cs2-demo-format` 的 `peerDependencies.zod` 调整为 `>=4.6.6 <5`；`pnpm gen:schema` 改用 Zod 4 原生 `z.toJSONSchema`（Draft-7），在生成的 `spec/*.schema.json` 中将整数校验收紧至 JavaScript 安全整数范围（`±9007199254740991`）。
+- **Python 最低版本提升至 3.14**：`cs2df` 的 `requires-python` 提升至 `>=3.14`，同步升级 `pandas>=3.1.1`、`numpy>=2.5.5`、`orjson>=3.13.0`、`jsonschema>=4.26.0` 与 `demoparser2>=0.42.2`。
+- **ZIP 数据合同保持 v3 兼容**：`manifest.schemaVersion` 仍为 `"cs2-demo-format/3.0"`，v3 ZIP 文件结构与字段语义完全向后兼容，可与 `3.x` 导出/消费端互通。
 
 ### Fixed
 
-- 击杀事件按回合及 tick 稳定排序后生成补枪标记；补齐同回合、敌我与队友关系检查，避免乱序事件、自杀或队杀被关联为补枪。6 秒窗口按 demo tickrate 换算，保留最近一条队友死亡的归属规则。
+- 击杀事件按回合及 tick 稳定排序后生成补枪标记；补齐同回合、敌我与队友关系检查，避免乱序事件、自杀或队杀被关联为补枪。6 秒窗口按 demo tickrate 换算，保留最近一条队友死亡的归属规则。（#17）
+- 加固发布工作流与锁定安装校验（PyPI 发布对齐 `--locked`，npm 发布前执行格式、lint 与版本一致性检查）。（#31）
 
 ## 3.1.1 — 2026-11-26
 

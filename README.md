@@ -65,8 +65,12 @@ The files fall into four groups:
 For every field and calculation rule, see
 [`docs/field-contract.md`](./docs/field-contract.md).
 
-## v3.x Highlights
+## Release Highlights
 
+- **v4.0.0 upgrades the toolchain to Zod 4 and Python >= 3.14.** Native Zod 4
+  schemas and `z.toJSONSchema` tighten integer bounds to JS safe integers while
+  keeping `schemaVersion: "cs2-demo-format/3.0"` ZIPs wire-compatible with
+  `3.x` producers and consumers.
 - **v3.1.1 fixes round restarts and restores.** Export the final scoring
   timeline.
 - **v3.1.0 adds multi-part demo merging.** Pass split GOTV parts
