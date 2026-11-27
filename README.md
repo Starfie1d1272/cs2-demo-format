@@ -67,6 +67,8 @@ For every field and calculation rule, see
 
 ## v3.x Highlights
 
+- **v3.1.1 fixes round restarts and restores.** Export the final scoring
+  timeline.
 - **v3.1.0 adds multi-part demo merging.** Pass split GOTV parts
   (`…-p1.dem …-p2.dem`) to `cs2df export` and they are merged into one
   coherent v3 ZIP; tick timelines are reconciled and duplicate round events

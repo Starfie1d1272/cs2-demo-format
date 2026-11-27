@@ -9,6 +9,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
 
 - 击杀事件按回合及 tick 稳定排序后生成补枪标记；补齐同回合、敌我与队友关系检查，避免乱序事件、自杀或队杀被关联为补枪。6 秒窗口按 demo tickrate 换算，保留最近一条队友死亡的归属规则。
 
+## 3.1.1 — 2026-11-26
+
+### Fixed
+
+- Preserve completed rounds when a server restarts or restores a round.
+  Keep the scoring attempt and omit events from abandoned attempts.
+- Require demoparser2 0.42.2 or newer for affected Perfect World recordings.
+
 ## 3.1.0 — 2026-06-21
 
 ### Added
