@@ -1,5 +1,5 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v3.1.1)
+ * cs2-demo-format — Canonical Zod Schemas (v4.0.0)
  *
  * Strict export contract for CS2 demo ZIP packages.
  * `schemas/index.ts` is the single source of truth; JSON Schema files in

@@ -60,8 +60,11 @@ match.zip
 
 每个字段和计算规则见 [`docs/field-contract.md`](./docs/field-contract.md)。
 
-## v3.x 重点
+## 版本亮点
 
+- **v4.0.0 升级至 Zod 4 与 Python >= 3.14 工具链。** 迁移原生 Zod 4 schema
+  与 `z.toJSONSchema`，将整数校验收紧为 JS 安全整数范围；ZIP 协议版本仍为
+  `"cs2-demo-format/3.0"`，继续与 `3.x` 导出和消费端互通。
 - **v3.1.1 修复回合重开与回档恢复。** 保留最终计分时间线，过滤被
   重开/回档作废尝试的事件。
 - **v3.1.0 支持多段 demo 合并。** 把分段 GOTV 录像（`…-p1.dem …-p2.dem`）
