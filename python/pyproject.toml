@@ -3,13 +3,13 @@ name = "cs2df"
 version = "3.1.1"
 description = "Reference exporter & validator CLI for cs2-demo-format v3 (CS2 demo → ZIP data package)"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
     "demoparser2>=0.42.2",
-    "pandas>=3.0.6",
-    "numpy>=2.5.3",
-    "orjson>=3.12.0",
+    "pandas>=3.1.1",
+    "numpy>=2.5.5",
+    "orjson>=3.13.0",
     "jsonschema>=4.26.0",
 ]
 
@@ -22,7 +22,7 @@ Issues = "https://github.com/Starfie1d1272/cs2-demo-format/issues"
 cs2df = "cs2df.cli:main"
 
 [build-system]
-requires = ["hatchling>=1.32.4"]
+requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -30,6 +30,6 @@ packages = ["src/cs2df"]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "ruff==0.17.4",
+    "pytest>=9.2.0",
+    "ruff==0.17.6",
 ]
