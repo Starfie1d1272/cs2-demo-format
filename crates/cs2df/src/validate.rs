@@ -368,11 +368,10 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
         damages.len()
     );
 
-    if let Some(&max_r) = round_numbers.iter().max() {
+    if !round_numbers.is_empty() {
         let mut sorted = round_numbers.clone();
         sorted.sort_unstable();
-        let expected: Vec<i64> = (1..=max_r).collect();
-        if sorted != expected {
+        if !sorted.iter().enumerate().all(|(i, &r)| r == (i + 1) as i64) {
             push_err(
                 errors,
                 "rounds.json: roundNumber must be continuous from 1 with no gaps/duplicates",

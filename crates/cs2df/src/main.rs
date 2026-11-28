@@ -81,7 +81,7 @@ enum Commands {
         #[arg(long, default_value_t = 3)]
         compress_level: u32,
 
-        /// Parallel worker count (default: logical CPU count)
+        /// Parallel worker count (default: min(logical CPU count, 4))
         #[arg(long)]
         workers: Option<usize>,
 
@@ -127,6 +127,10 @@ fn main() -> ExitCode {
                     eprintln!("ERROR: demo not found: {}", d.display());
                     return ExitCode::from(1);
                 }
+            }
+            if sample_rate < 1 {
+                eprintln!("ERROR: --sample-rate must be >= 1");
+                return ExitCode::from(1);
             }
             if compress_level > 9 {
                 eprintln!("ERROR: --compress-level must be between 0 and 9");
@@ -196,13 +200,17 @@ fn main() -> ExitCode {
                 eprintln!("ERROR: not a directory: {}", directory.display());
                 return ExitCode::from(1);
             }
+            if sample_rate < 1 {
+                eprintln!("ERROR: --sample-rate must be >= 1");
+                return ExitCode::from(1);
+            }
             if compress_level > 9 {
                 eprintln!("ERROR: --compress-level must be between 0 and 9");
                 return ExitCode::from(1);
             }
             let workers = workers.unwrap_or_else(|| {
                 std::thread::available_parallelism()
-                    .map(|n| n.get())
+                    .map(|n| n.get().min(4))
                     .unwrap_or(1)
             });
             if workers < 1 {

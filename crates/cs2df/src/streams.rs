@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::enums::{classify_inventory, normalize_weapon_name, GrenadeType};
+use crate::enums::{normalize_weapon_name, GrenadeType};
 use crate::events::{round_ties_even_i64, DamageRow, KillRow, PlayerDirectory};
 use crate::rounds::RoundModel;
 
@@ -79,11 +79,17 @@ impl ReplayColumns {
     }
 
     pub fn push_inventory(&mut self, items: &[String]) {
-        let (_, _, _, g) = classify_inventory(items);
-        let bomb = items
-            .iter()
-            .any(|item| normalize_weapon_name(Some(item)).as_deref() == Some("c4"));
-        self.grenades.push(g);
+        let mut grenades = Vec::new();
+        let mut bomb = false;
+        for item in items {
+            let trimmed = item.trim();
+            if let Some(g) = GrenadeType::from_inventory_item(trimmed) {
+                grenades.push(g);
+            } else if !bomb && normalize_weapon_name(Some(trimmed)).as_deref() == Some("c4") {
+                bomb = true;
+            }
+        }
+        self.grenades.push(grenades);
         self.has_bomb.push(bomb);
     }
 
@@ -326,7 +332,7 @@ pub fn build_replay(
         return None;
     }
 
-    let step = (tickrate / sample_rate.max(1)).max(1);
+    let step = (tickrate / sample_rate).max(1);
 
     let mut by_tick: Vec<(i64, usize, usize)> = Vec::with_capacity(cols.len());
     for i in 0..cols.len() {

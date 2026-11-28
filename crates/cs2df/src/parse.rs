@@ -84,8 +84,9 @@ pub struct RawDemo {
     pub freeze_ticks: Vec<i64>,
 }
 
-fn build_real_name_map(props: &[String]) -> (Vec<String>, AHashMap<String, String>) {
-    let real_names = rm_user_friendly_names(&props.to_vec()).unwrap_or_else(|_| props.to_vec());
+fn build_real_name_map(props: &[String]) -> Result<(Vec<String>, AHashMap<String, String>)> {
+    let real_names = rm_user_friendly_names(&props.to_vec())
+        .map_err(|e| anyhow::anyhow!("failed to resolve property names: {e:?}"))?;
     let mut real_to_og = AHashMap::default();
     for (og, real) in props.iter().zip(real_names.iter()) {
         real_to_og.insert(real.clone(), og.clone());
@@ -95,7 +96,7 @@ fn build_real_name_map(props: &[String]) -> (Vec<String>, AHashMap<String, Strin
             .entry((*v).to_string())
             .or_insert_with(|| (*k).to_string());
     }
-    (real_names, real_to_og)
+    Ok((real_names, real_to_og))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -118,8 +119,8 @@ fn run_parser(
         }
     }
     let o_props: Vec<String> = other_props.iter().map(|s| (*s).to_string()).collect();
-    let (real_player_props, mut real_to_og) = build_real_name_map(&p_props);
-    let (real_other_props, other_to_og) = build_real_name_map(&o_props);
+    let (real_player_props, mut real_to_og) = build_real_name_map(&p_props)?;
+    let (real_other_props, other_to_og) = build_real_name_map(&o_props)?;
     for (k, v) in other_to_og {
         real_to_og.insert(k, v);
     }
@@ -493,9 +494,7 @@ fn to_bomb_row(ev: &GameEvent, kind: BombEventKind) -> BombRawEvent {
         tick: ev.tick as i64,
         total_rounds_played: var_i64(event_field(ev, "total_rounds_played")).unwrap_or(0),
         user_steamid: var_u64(
-            event_field(ev, "user_steamid")
-                .or_else(|| event_field(ev, "steamid"))
-                .or_else(|| event_field(ev, "userid")),
+            event_field(ev, "user_steamid").or_else(|| event_field(ev, "steamid")),
         ),
         user_x: var_f64(event_field_ci(ev, "user_X")),
         user_y: var_f64(event_field_ci(ev, "user_Y")),
@@ -1056,9 +1055,7 @@ pub fn parse_demo(
             tick: ev.tick as i64,
             total_rounds_played: var_i64(event_field(&ev, "total_rounds_played")).unwrap_or(0),
             user_steamid: var_u64(
-                event_field(&ev, "user_steamid")
-                    .or_else(|| event_field(&ev, "steamid"))
-                    .or_else(|| event_field(&ev, "userid")),
+                event_field(&ev, "user_steamid").or_else(|| event_field(&ev, "steamid")),
             ),
             weapon: var_str(event_field(&ev, "weapon")),
             user_x: var_f64(event_field_ci(&ev, "user_X")),
@@ -1207,7 +1204,8 @@ pub fn parse_demo(
     // Pass 5: replay grid (8 Hz) directly into columnar ReplayColumns
     report("replay grid (slowest stage)", 0.55);
     let st = Instant::now();
-    let step = (tickrate / opts.sample_rate.max(1)).max(1);
+    anyhow::ensure!(opts.sample_rate >= 1, "--sample-rate must be >= 1");
+    let step = (tickrate / opts.sample_rate).max(1);
     let replay_ticks = build_sample_ticks(&round_ends, &round_freeze_ends, &round_starts, step);
     let mut replay_cols = ReplayColumns::default();
     if !replay_ticks.is_empty() {

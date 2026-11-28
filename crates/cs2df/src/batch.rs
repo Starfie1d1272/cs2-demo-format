@@ -1,15 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Instant, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
 use serde::Serialize;
+use tempfile::NamedTempFile;
 
 use crate::events::round_f64;
 use crate::package::{export_demo_merged_with_target, ExportOptions, MatchMeta};
@@ -176,7 +175,8 @@ pub fn build_descriptive_name(meta: &MatchMeta, stem: &str, date_str: &str) -> S
     }
 }
 
-pub fn allocate_unique_zip_path(
+pub fn commit_unique_zip(
+    mut tmp: NamedTempFile,
     out_dir: &Path,
     preferred_name: &str,
     stem: &str,
@@ -219,13 +219,16 @@ pub fn allocate_unique_zip_path(
 
     for name in candidates {
         let path = out_dir.join(&name);
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut f) => {
-                let _ = f.flush();
-                return Ok(path);
+        match tmp.persist_noclobber(&path) {
+            Ok(_) => return Ok(path),
+            Err(e) if e.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                tmp = e.file;
+                continue;
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                return Err(anyhow::Error::from(e.error))
+                    .with_context(|| format!("failed to persist {}", path.display()));
+            }
         }
     }
     anyhow::bail!("could not allocate unique output name for {preferred_name}");
@@ -304,25 +307,29 @@ pub fn run_batch(
                 let part_refs: Vec<&Path> = job.parts.iter().map(PathBuf::as_path).collect();
 
                 let res = catch_unwind(AssertUnwindSafe(|| {
-                    let mut reserved_path: Option<PathBuf> = None;
-                    let r = export_demo_merged_with_target(&part_refs, opts, None, |meta| {
-                        if descriptive {
-                            let date_str = file_date_str(first_dem);
-                            let pref = build_descriptive_name(meta, &job.logical_stem, &date_str);
-                            let _guard = unique_lock.lock().unwrap();
-                            let p = allocate_unique_zip_path(directory, &pref, &job.logical_stem)?;
-                            reserved_path = Some(p.clone());
-                            Ok(p)
-                        } else {
-                            Ok(directory.join(format!("{}.zip", job.logical_stem)))
-                        }
-                    });
-                    if r.is_err() {
-                        if let Some(rp) = reserved_path {
-                            let _ = std::fs::remove_file(rp);
-                        }
-                    }
-                    r
+                    export_demo_merged_with_target(
+                        &part_refs,
+                        directory,
+                        opts,
+                        None,
+                        |tmp, meta| {
+                            if descriptive {
+                                let date_str = file_date_str(first_dem);
+                                let pref =
+                                    build_descriptive_name(meta, &job.logical_stem, &date_str);
+                                let _guard = unique_lock.lock().unwrap();
+                                commit_unique_zip(tmp, directory, &pref, &job.logical_stem)
+                            } else {
+                                let path = directory.join(format!("{}.zip", job.logical_stem));
+                                tmp.persist(&path)
+                                    .map_err(|e| anyhow::Error::from(e.error))
+                                    .with_context(|| {
+                                        format!("failed to persist {}", path.display())
+                                    })?;
+                                Ok(path)
+                            }
+                        },
+                    )
                 }));
 
                 let row = match res {

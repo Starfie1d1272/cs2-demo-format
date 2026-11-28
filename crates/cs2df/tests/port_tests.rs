@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use cs2df::batch::{
-    aggregate_timings, allocate_unique_zip_path, build_descriptive_name, group_demos_in_dir,
-    run_batch, strip_part_suffix, BatchItemRow,
+    aggregate_timings, build_descriptive_name, commit_unique_zip, group_demos_in_dir, run_batch,
+    strip_part_suffix, BatchItemRow,
 };
 use cs2df::enums::{Side, TeamKey};
 use cs2df::events::{
@@ -16,6 +16,7 @@ use cs2df::parse::{build_sample_ticks, parse_demo, ParseOptions, RawDemo};
 use cs2df::rounds::{build_rounds, RoundMarkerRow, RoundModel, RoundWindow};
 use cs2df::streams::{build_replay, delta_encode, DuelColumns, ReplayColumns};
 use cs2df::validate::{decode_delta, validate_dir_fixture};
+use tempfile::NamedTempFile;
 
 fn make_players() -> PlayerDirectory {
     let teams = [
@@ -690,7 +691,8 @@ fn descriptive_unique_allocation_never_overwrites_existing_stem_zip() {
         compress_level: 3,
     };
     let pref = build_descriptive_name(&meta, "match-one", "2026-06-12");
-    let out_p = allocate_unique_zip_path(&tmp, &pref, "match-one").unwrap();
+    let tmp_zip = NamedTempFile::new_in(&tmp).unwrap();
+    let out_p = commit_unique_zip(tmp_zip, &tmp, &pref, "match-one").unwrap();
     assert_eq!(
         out_p.file_name().unwrap(),
         "2026-06-12_de_mirage_Team_A-vs-Team_B_13-11.zip"
@@ -721,10 +723,20 @@ fn batch_groups_split_gotv_parts_and_allocates_unique_names() {
     assert!(jobs[0].parts[1].ends_with("match-a-p2.dem"));
     assert_eq!(jobs[1].logical_stem, "match-b");
 
-    let first =
-        allocate_unique_zip_path(&tmp, "2026-06-12_de_mirage_A-vs-B_13-11.zip", "m1").unwrap();
-    let second =
-        allocate_unique_zip_path(&tmp, "2026-06-12_de_mirage_A-vs-B_13-11.zip", "m2").unwrap();
+    let first = commit_unique_zip(
+        NamedTempFile::new_in(&tmp).unwrap(),
+        &tmp,
+        "2026-06-12_de_mirage_A-vs-B_13-11.zip",
+        "m1",
+    )
+    .unwrap();
+    let second = commit_unique_zip(
+        NamedTempFile::new_in(&tmp).unwrap(),
+        &tmp,
+        "2026-06-12_de_mirage_A-vs-B_13-11.zip",
+        "m2",
+    )
+    .unwrap();
     assert_eq!(
         first.file_name().unwrap(),
         "2026-06-12_de_mirage_A-vs-B_13-11.zip"

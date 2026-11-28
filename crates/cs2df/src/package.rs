@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use tempfile::NamedTempFile;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -107,20 +108,31 @@ pub fn export_demo_merged_to_file(
     opts: &ExportOptions,
     progress: Option<ProgressFn<'_>>,
 ) -> Result<(u64, MatchMeta)> {
+    let out_dir = out_zip
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
     let (bytes, _, meta) =
-        export_demo_merged_with_target(dem_paths, opts, progress, |_| Ok(out_zip.to_path_buf()))?;
+        export_demo_merged_with_target(dem_paths, out_dir, opts, progress, |tmp, _| {
+            tmp.persist(out_zip)
+                .map_err(|e| anyhow::Error::from(e.error))
+                .with_context(|| format!("failed to persist {}", out_zip.display()))?;
+            Ok(out_zip.to_path_buf())
+        })?;
     Ok((bytes, meta))
 }
 
 pub fn export_demo_merged_with_target<F>(
     dem_paths: &[&Path],
+    out_dir: &Path,
     opts: &ExportOptions,
     progress: Option<ProgressFn<'_>>,
-    choose_target: F,
+    commit: F,
 ) -> Result<(u64, PathBuf, MatchMeta)>
 where
-    F: FnOnce(&MatchMeta) -> Result<PathBuf>,
+    F: FnOnce(NamedTempFile, &MatchMeta) -> Result<PathBuf>,
 {
+    anyhow::ensure!(opts.sample_rate >= 1, "--sample-rate must be >= 1");
     let demo_hash = if dem_paths.len() == 1 {
         sha256_file(dem_paths[0]).ok()
     } else {
@@ -183,33 +195,32 @@ where
     build_package_streaming(
         &raw,
         dem_paths[0],
+        out_dir,
         demo_hash,
         opts.window_before_ms,
         opts.window_after_ms,
         opts.compress_level,
-        choose_target,
+        commit,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_package_streaming<F>(
     raw: &RawDemo,
     dem_path: &Path,
+    out_dir: &Path,
     demo_hash: Option<String>,
     window_before_ms: i64,
     window_after_ms: i64,
     compress_level: u32,
-    choose_target: F,
+    commit: F,
 ) -> Result<(u64, PathBuf, MatchMeta)>
 where
-    F: FnOnce(&MatchMeta) -> Result<PathBuf>,
+    F: FnOnce(NamedTempFile, &MatchMeta) -> Result<PathBuf>,
 {
     let mut timings = raw.timings.clone();
-    let tickrate = if raw.tickrate > 0 { raw.tickrate } else { 64 };
-    let sample_rate = if raw.sample_rate > 0 {
-        raw.sample_rate
-    } else {
-        8
-    };
+    let tickrate = raw.tickrate;
+    let sample_rate = raw.sample_rate;
 
     let st = Instant::now();
     let players = build_players(&raw.player_info);
@@ -382,102 +393,85 @@ where
         compress_level,
     };
 
-    let out_zip = choose_target(&meta)?;
     let st = Instant::now();
-    let parent = out_zip.parent().unwrap_or_else(|| Path::new("."));
-    if !parent.as_os_str().is_empty() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let fname = out_zip
-        .file_name()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "export.zip".to_string());
-    let tmp_path = parent.join(format!(".{fname}.tmp.{}", std::process::id()));
+    let target_dir = if out_dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        out_dir
+    };
+    std::fs::create_dir_all(target_dir)?;
+    let mut tmp = NamedTempFile::new_in(target_dir)
+        .with_context(|| format!("failed to create temp zip in {}", target_dir.display()))?;
 
-    let write_res = (|| -> Result<u64> {
-        {
-            let f = File::create(&tmp_path)
-                .with_context(|| format!("failed to create temp zip: {}", tmp_path.display()))?;
-            let bw = BufWriter::with_capacity(1 << 20, f);
-            let mut zw = ZipWriter::new(bw);
+    {
+        let bw = BufWriter::with_capacity(1 << 20, &mut tmp);
+        let mut zw = ZipWriter::new(bw);
 
-            let method = if compress_level == 0 {
-                CompressionMethod::Stored
-            } else {
-                CompressionMethod::Deflated
-            };
-            let mut options = SimpleFileOptions::default().compression_method(method);
-            if compress_level > 0 {
-                options = options.compression_level(Some(compress_level as i64));
-            }
-
-            zw.start_file("manifest.json", options)?;
-            serde_json::to_writer(&mut zw, &manifest)?;
-
-            zw.start_file("match.json", options)?;
-            serde_json::to_writer(&mut zw, &match_json)?;
-
-            zw.start_file("players.json", options)?;
-            serde_json::to_writer(&mut zw, &players.rows)?;
-
-            zw.start_file("rounds.json", options)?;
-            serde_json::to_writer(&mut zw, &rounds)?;
-
-            zw.start_file("player-stats.json", options)?;
-            serde_json::to_writer(&mut zw, &player_stats)?;
-
-            zw.start_file("player-economies.json", options)?;
-            serde_json::to_writer(&mut zw, &economies)?;
-
-            zw.start_file("kills.json", options)?;
-            serde_json::to_writer(&mut zw, &kills)?;
-
-            zw.start_file("damages.json", options)?;
-            serde_json::to_writer(&mut zw, &damages)?;
-
-            zw.start_file("blinds.json", options)?;
-            serde_json::to_writer(&mut zw, &blinds)?;
-
-            zw.start_file("bombs.json", options)?;
-            serde_json::to_writer(&mut zw, &bombs)?;
-
-            zw.start_file("grenades.json", options)?;
-            serde_json::to_writer(&mut zw, &grenades)?;
-
-            zw.start_file("clutches.json", options)?;
-            serde_json::to_writer(&mut zw, &clutches)?;
-
-            if let Some(s) = shots {
-                zw.start_file("shots.json", options)?;
-                serde_json::to_writer(&mut zw, &s)?;
-            }
-            if let Some(r) = replay {
-                zw.start_file("replay.json", options)?;
-                serde_json::to_writer(&mut zw, &r)?;
-            }
-            if let Some(d) = duels {
-                zw.start_file("duels.json", options)?;
-                serde_json::to_writer(&mut zw, &d)?;
-            }
-
-            let mut bw = zw.finish()?;
-            bw.flush()?;
+        let method = if compress_level == 0 {
+            CompressionMethod::Stored
+        } else {
+            CompressionMethod::Deflated
+        };
+        let mut options = SimpleFileOptions::default().compression_method(method);
+        if compress_level > 0 {
+            options = options.compression_level(Some(compress_level as i64));
         }
-        let size = std::fs::metadata(&tmp_path)?.len();
-        std::fs::rename(&tmp_path, &out_zip).with_context(|| {
-            format!(
-                "failed to rename {} -> {}",
-                tmp_path.display(),
-                out_zip.display()
-            )
-        })?;
-        Ok(size)
-    })();
 
-    if write_res.is_err() {
-        let _ = std::fs::remove_file(&tmp_path);
+        zw.start_file("manifest.json", options)?;
+        serde_json::to_writer(&mut zw, &manifest)?;
+
+        zw.start_file("match.json", options)?;
+        serde_json::to_writer(&mut zw, &match_json)?;
+
+        zw.start_file("players.json", options)?;
+        serde_json::to_writer(&mut zw, &players.rows)?;
+
+        zw.start_file("rounds.json", options)?;
+        serde_json::to_writer(&mut zw, &rounds)?;
+
+        zw.start_file("player-stats.json", options)?;
+        serde_json::to_writer(&mut zw, &player_stats)?;
+
+        zw.start_file("player-economies.json", options)?;
+        serde_json::to_writer(&mut zw, &economies)?;
+
+        zw.start_file("kills.json", options)?;
+        serde_json::to_writer(&mut zw, &kills)?;
+
+        zw.start_file("damages.json", options)?;
+        serde_json::to_writer(&mut zw, &damages)?;
+
+        zw.start_file("blinds.json", options)?;
+        serde_json::to_writer(&mut zw, &blinds)?;
+
+        zw.start_file("bombs.json", options)?;
+        serde_json::to_writer(&mut zw, &bombs)?;
+
+        zw.start_file("grenades.json", options)?;
+        serde_json::to_writer(&mut zw, &grenades)?;
+
+        zw.start_file("clutches.json", options)?;
+        serde_json::to_writer(&mut zw, &clutches)?;
+
+        if let Some(s) = shots {
+            zw.start_file("shots.json", options)?;
+            serde_json::to_writer(&mut zw, &s)?;
+        }
+        if let Some(r) = replay {
+            zw.start_file("replay.json", options)?;
+            serde_json::to_writer(&mut zw, &r)?;
+        }
+        if let Some(d) = duels {
+            zw.start_file("duels.json", options)?;
+            serde_json::to_writer(&mut zw, &d)?;
+        }
+
+        let mut bw = zw.finish()?;
+        bw.flush()?;
     }
-    let zip_bytes = write_res?;
+
+    let zip_bytes = tmp.as_file().metadata()?.len();
+    let out_zip = commit(tmp, &meta)?;
     meta.timings_seconds.insert(
         "package.writeZip".to_string(),
         round_f64(st.elapsed().as_secs_f64(), 3),
