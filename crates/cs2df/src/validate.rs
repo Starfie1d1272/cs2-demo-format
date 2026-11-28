@@ -169,7 +169,12 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
     let file = File::open(zip_path)?;
     let mut archive = ZipArchive::new(file)?;
     let zip_names: HashSet<String> = (0..archive.len())
-        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .filter_map(|i| {
+            archive
+                .by_index(i)
+                .ok()
+                .and_then(|f| f.name().ok().map(|s| s.into_owned()))
+        })
         .collect();
 
     if !zip_names.contains("manifest.json") {
@@ -359,7 +364,7 @@ fn validate_schema(
     };
     let schema_errors: Vec<_> = validator.iter_errors(value).collect();
     for e in schema_errors.iter().take(20) {
-        let path_str = e.instance_path.to_string();
+        let path_str = e.instance_path().to_string();
         let path = if path_str.is_empty() {
             "(root)"
         } else {
