@@ -67,6 +67,11 @@ For every field and calculation rule, see
 
 ## Release Highlights
 
+- **v5.0.0 switches to the pure-Rust `cs2df` CLI and `cs2-demo-format/3.1`.**
+  Removes the legacy Python exporter, ships prebuilt binaries for macOS
+  Apple Silicon, Linux x64, and Windows x64 via GitHub Releases, adds `3.1`
+  combat/utility/weapon-lifecycle telemetry, and makes the TypeScript consumer
+  `3.x` forward-compatible.
 - **v4.0.0 upgrades the toolchain to Zod 4 and Python >= 3.14.** Native Zod 4
   schemas and `z.toJSONSchema` tighten integer bounds to JS safe integers while
   keeping `schemaVersion: "cs2-demo-format/3.0"` ZIPs wire-compatible with
@@ -103,30 +108,27 @@ For every field and calculation rule, see
 
 ## Quick Start: Export a Demo
 
-The reference exporter is in [`python/`](./python/) and uses
-[`demoparser2`](https://github.com/LaihoE/demoparser) under the hood.
+Download a prebuilt `cs2df` binary from [GitHub Releases](https://github.com/Starfie1d1272/cs2-demo-format/releases)
+(macOS Apple Silicon, Linux x64, Windows x64) or build from source with `cargo build --release -p cs2df`.
 
 ```bash
-cd python
-uv sync
-
-# Standard export: required files + shots.json + replay.json
-uv run cs2df export match.dem
+# Standard export: required files + shots.json + replay.json + weapons.json
+cs2df export match.dem
 
 # Multi-part GOTV recording (HLTV split demos) — merged into one ZIP
-uv run cs2df export match-p1.dem match-p2.dem
+cs2df export match-p1.dem match-p2.dem
 
 # Research export: also includes full-tick duels.json windows
-uv run cs2df export match.dem --research
+cs2df export match.dem --research
 
-# Validate the result
-uv run cs2df validate match.zip --strict
+# Validate any 3.0 or 3.1 ZIP
+cs2df validate match.zip --strict
 ```
 
 Batch export a directory of demos:
 
 ```bash
-uv run cs2df export-batch ./demos --workers 8 --descriptive
+cs2df export-batch ./demos --workers 4 --descriptive
 ```
 
 `export-batch` writes one ZIP per `.dem` plus `report.json` with per-demo
@@ -182,7 +184,7 @@ which show the real shape and scale of a v3 export.
 
 A conformant v3 package guarantees:
 
-- `schemaVersion` is exactly `"cs2-demo-format/3.0"`.
+- `schemaVersion` is `"cs2-demo-format/3.1"` (or `"cs2-demo-format/3.0"` for legacy v3 exports; the TS consumer accepts `3.x`).
 - `players.json` row order is normative; that row index is `playerIndex`.
 - `roundNumber` starts at `1` and only covers formal rounds.
 - Event `roundNumber` values exist in `rounds.json`.
@@ -203,8 +205,7 @@ source of truth.
 | [`schemas/index.ts`](./schemas/index.ts) | Canonical Zod schemas, TypeScript types, and decode helpers. |
 | [`spec/`](./spec/) | Generated JSON Schema files for non-TypeScript consumers. |
 | [`parser/index.ts`](./parser/index.ts) | Reference TypeScript ZIP parser and schema validator. |
-| [`python/`](./python/) | Reference Python exporter and validator CLI (`cs2df`). |
-| [`tools/validate.py`](./tools/validate.py) | Thin wrapper around `cs2df validate`. |
+| [`crates/cs2df/`](./crates/cs2df/) | Pure-Rust reference exporter and validator CLI (`cs2df`). |
 | [`docs/field-contract.md`](./docs/field-contract.md) | File-by-file field semantics and calculation rules. |
 | [`fixtures/`](./fixtures/) | Golden v3 fixture plus legacy history fixture. |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Release history. |
@@ -220,7 +221,7 @@ pnpm validate:fixtures
 
 ## Known Implementations
 
-- **Reference producer:** [`python/cs2df`](./python/)
+- **Reference producer:** [`crates/cs2df`](./crates/cs2df/)
 - **Producer / toolkit:** [`cs2-demo-analysis-kit`](https://github.com/Starfie1d1272/cs2-demo-analysis-kit)
 - **Consumer:** [`RivalHub`](https://github.com/Starfie1d1272/RivalHub)
 - **Original event-extraction provenance:**
@@ -238,7 +239,7 @@ This package follows [Semantic Versioning](https://semver.org/).
 
 Release tags use `vX.Y.Z` format.
 Before tagging, run `pnpm check:versions` so `package.json`,
-`python/pyproject.toml`, and `cs2df.__version__` stay aligned.
+`crates/cs2df/Cargo.toml`, and `schemas/index.ts` stay aligned.
 
 ## License
 

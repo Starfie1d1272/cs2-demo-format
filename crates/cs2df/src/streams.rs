@@ -11,6 +11,12 @@ pub const COORD_SCALE: i64 = 1;
 pub const FLAG_ALIVE: i64 = 1;
 pub const FLAG_HAS_BOMB: i64 = 2;
 pub const FLAG_HAS_DEFUSE_KIT: i64 = 4;
+pub const FLAG_HAS_HELMET: i64 = 8;
+pub const FLAG_IS_SCOPED: i64 = 16;
+pub const FLAG_IS_WALKING: i64 = 32;
+pub const FLAG_IS_AIRBORNE: i64 = 64;
+pub const FLAG_IS_DUCKING: i64 = 128;
+pub const FLAG_IS_IN_RELOAD: i64 = 256;
 
 #[derive(Debug, Default, Clone)]
 pub struct StringDict {
@@ -67,6 +73,8 @@ pub struct ReplayColumns {
     pub place_codes: Vec<i32>,
     pub grenades: Vec<Vec<GrenadeType>>,
     pub has_bomb: Vec<bool>,
+    pub flags_extra: Vec<i64>,
+    pub ammo: Vec<i64>,
 }
 
 impl ReplayColumns {
@@ -148,6 +156,8 @@ impl ReplayColumns {
             }));
         self.grenades.extend(other.grenades);
         self.has_bomb.extend(other.has_bomb);
+        self.flags_extra.extend(other.flags_extra);
+        self.ammo.extend(other.ammo);
     }
 }
 
@@ -162,6 +172,7 @@ pub struct DuelColumns {
     pub pitch: Vec<Option<f32>>,
     pub health: Vec<Option<f32>>,
     pub flash_duration: Vec<Option<f32>>,
+    pub flags: Vec<i64>,
 }
 
 impl DuelColumns {
@@ -193,6 +204,7 @@ impl DuelColumns {
         self.pitch.extend(other.pitch);
         self.health.extend(other.health);
         self.flash_duration.extend(other.flash_duration);
+        self.flags.extend(other.flags);
     }
 }
 
@@ -210,6 +222,12 @@ pub struct FireRawRow {
     pub velocity_x: Option<f64>,
     pub velocity_y: Option<f64>,
     pub velocity_z: Option<f64>,
+    pub aim_punch_x: Option<f64>,
+    pub aim_punch_y: Option<f64>,
+    pub accuracy_penalty: Option<f64>,
+    pub recoil_idx: Option<i64>,
+    pub ammo: Option<i64>,
+    pub flags: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -260,6 +278,7 @@ pub struct ReplayPlayerTrack {
     pub flash: Vec<i64>,
     pub flags: Vec<i64>,
     pub grenades: Vec<Vec<GrenadeType>>,
+    pub ammo: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -427,6 +446,7 @@ pub fn build_replay(
             let mut widx = vec![-1i64; frame_count];
             let mut plidx = vec![-1i64; frame_count];
             let mut flags = vec![0i64; frame_count];
+            let mut ammo = vec![0i64; frame_count];
 
             for (fi, row_opt) in aligned.iter().enumerate() {
                 let Some(ri) = *row_opt else {
@@ -459,7 +479,17 @@ pub fn build_replay(
                         FLAG_HAS_DEFUSE_KIT
                     } else {
                         0
+                    }
+                    + if alive == 1 {
+                        cols.flags_extra.get(ri).copied().unwrap_or(0)
+                    } else {
+                        0
                     };
+                ammo[fi] = if alive == 1 {
+                    cols.ammo.get(ri).copied().unwrap_or(0)
+                } else {
+                    0
+                };
             }
 
             let mut grenades_out = vec![Vec::new(); frame_count];
@@ -494,6 +524,7 @@ pub fn build_replay(
                 flash,
                 flags,
                 grenades: grenades_out,
+                ammo,
             });
         }
 
@@ -558,6 +589,7 @@ pub struct DuelPlayerTrack {
     pub pitch: Vec<i64>,
     pub hp: Vec<i64>,
     pub flash: Vec<i64>,
+    pub flags: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -678,6 +710,7 @@ pub fn build_duels(
             let mut raw_pitch = vec![None; frame_count];
             let mut hp = vec![0i64; frame_count];
             let mut flash = vec![0i64; frame_count];
+            let mut flags = vec![0i64; frame_count];
             let mut any_present = false;
 
             for (fi, row_opt) in aligned.iter().enumerate() {
@@ -696,6 +729,11 @@ pub fn build_duels(
                     flash[fi] =
                         round_ties_even_i64(cols.flash_duration[ri].unwrap_or(0.0) as f64 * 10.0)
                             .clamp(0, 60);
+                    flags[fi] = if hp[fi] > 0 {
+                        cols.flags.get(ri).copied().unwrap_or(0)
+                    } else {
+                        0
+                    };
                 }
             }
             if !any_present {
@@ -710,6 +748,7 @@ pub fn build_duels(
                 pitch: delta_encode(&ffill_bfill_round(&raw_pitch, ANGLE_SCALE as f64)),
                 hp,
                 flash,
+                flags,
             });
         }
 
@@ -765,6 +804,12 @@ pub struct ShotTrack {
     pub vz: Vec<i64>,
     pub yaw: Vec<i64>,
     pub pitch: Vec<i64>,
+    pub aim_punch_x: Vec<i64>,
+    pub aim_punch_y: Vec<i64>,
+    pub accuracy_penalty: Vec<i64>,
+    pub recoil_idx: Vec<i64>,
+    pub ammo: Vec<i64>,
+    pub flags: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -852,6 +897,12 @@ pub fn build_shots(
         let mut vx_vals = Vec::with_capacity(rows.len());
         let mut vy_vals = Vec::with_capacity(rows.len());
         let mut vz_vals = Vec::with_capacity(rows.len());
+        let mut ap_x_vals = Vec::with_capacity(rows.len());
+        let mut ap_y_vals = Vec::with_capacity(rows.len());
+        let mut acc_vals = Vec::with_capacity(rows.len());
+        let mut rec_vals = Vec::with_capacity(rows.len());
+        let mut ammo_vals = Vec::with_capacity(rows.len());
+        let mut flag_vals = Vec::with_capacity(rows.len());
         for r in &rows {
             vx_vals.push(round_ties_even_i64(
                 r.velocity_x.filter(|v| v.is_finite()).unwrap_or(0.0),
@@ -862,6 +913,18 @@ pub fn build_shots(
             vz_vals.push(round_ties_even_i64(
                 r.velocity_z.filter(|v| v.is_finite()).unwrap_or(0.0),
             ));
+            ap_x_vals.push(round_ties_even_i64(
+                r.aim_punch_x.filter(|v| v.is_finite()).unwrap_or(0.0) * ANGLE_SCALE as f64,
+            ));
+            ap_y_vals.push(round_ties_even_i64(
+                r.aim_punch_y.filter(|v| v.is_finite()).unwrap_or(0.0) * ANGLE_SCALE as f64,
+            ));
+            acc_vals.push(round_ties_even_i64(
+                r.accuracy_penalty.filter(|v| v.is_finite()).unwrap_or(0.0) * 1000.0,
+            ));
+            rec_vals.push(r.recoil_idx.unwrap_or(0));
+            ammo_vals.push(r.ammo.unwrap_or(0));
+            flag_vals.push(r.flags);
         }
 
         tracks.push(ShotTrack {
@@ -877,6 +940,12 @@ pub fn build_shots(
             vz: vz_vals,
             yaw: delta_encode(&yaws),
             pitch: delta_encode(&pitches),
+            aim_punch_x: ap_x_vals,
+            aim_punch_y: ap_y_vals,
+            accuracy_penalty: acc_vals,
+            recoil_idx: rec_vals,
+            ammo: ammo_vals,
+            flags: flag_vals,
         });
     }
 

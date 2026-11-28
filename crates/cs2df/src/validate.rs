@@ -23,7 +23,7 @@ const REQUIRED_KEYS: [&str; 11] = [
     "rounds",
 ];
 
-const OPTIONAL_KEYS: [&str; 3] = ["duels", "replay", "shots"];
+const OPTIONAL_KEYS: [&str; 4] = ["duels", "replay", "shots", "weapons"];
 
 const REPLAY_COLS: [&str; 13] = [
     "x",
@@ -63,6 +63,7 @@ fn embedded_schema_str(key: &str) -> Option<&'static str> {
         "shots" => Some(include_str!("../../../spec/shots.schema.json")),
         "replay" => Some(include_str!("../../../spec/replay.schema.json")),
         "duels" => Some(include_str!("../../../spec/duels.schema.json")),
+        "weapons" => Some(include_str!("../../../spec/weapons.schema.json")),
         _ => None,
     }
 }
@@ -150,7 +151,10 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
         .get("schemaVersion")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    if schema_version != "cs2-demo-format/3.0" {
+    if !matches!(
+        schema_version,
+        "cs2-demo-format/3.0" | "cs2-demo-format/3.1"
+    ) {
         push_err(
             &mut errors,
             &format!("manifest.json: unsupported schemaVersion '{schema_version}'"),
@@ -335,6 +339,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
     let bombs = as_slice(data.get("bombs"));
     let grenades = as_slice(data.get("grenades"));
     let clutches = as_slice(data.get("clutches"));
+    let weapons = as_slice(data.get("weapons"));
     let shots = data.get("shots").and_then(|v| v.as_object());
     let replay = data.get("replay").and_then(|v| v.as_object());
     let duels = data.get("duels").and_then(|v| v.as_object());
@@ -456,6 +461,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
         ("bombs", bombs),
         ("grenades", grenades),
         ("clutches", clutches),
+        ("weapons", weapons),
         ("player-economies", economies),
     ] {
         check_event_rounds(name, rows, &round_set, errors);
@@ -465,6 +471,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
     check_tick_windows("damages", damages, &rounds_by_number, &["tick"], errors);
     check_tick_windows("blinds", blinds, &rounds_by_number, &["tick"], errors);
     check_tick_windows("bombs", bombs, &rounds_by_number, &["tick"], errors);
+    check_tick_windows("weapons", weapons, &rounds_by_number, &["tick"], errors);
     check_tick_windows(
         "grenades",
         grenades,
@@ -497,6 +504,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
             ["flasherIndex", "flashedIndex"].as_slice(),
         ),
         ("bombs", bombs, ["actorIndex"].as_slice()),
+        ("weapons", weapons, ["actorIndex"].as_slice()),
         ("grenades", grenades, ["throwerIndex"].as_slice()),
         ("clutches", clutches, ["clutcherIndex"].as_slice()),
         ("player-economies", economies, ["playerIndex"].as_slice()),

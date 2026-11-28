@@ -102,6 +102,14 @@ fn shift_part(raw: &mut RawDemo, off: i64) {
     for r in &mut raw.grenade_trajectories {
         shift_tick(&mut r.start_tick, off);
     }
+    for r in &mut raw.inferno_fires {
+        shift_tick(&mut r.start_tick, off);
+        shift_tick(&mut r.end_tick, off);
+    }
+    for r in &mut raw.weapon_spans {
+        shift_tick(&mut r.start_tick, off);
+        shift_tick(&mut r.end_tick, off);
+    }
     for r in &mut raw.round_side_samples {
         shift_tick(&mut r.tick, off);
     }
@@ -166,6 +174,8 @@ pub fn merge_raw(mut parts: Vec<RawDemo>) -> Result<RawDemo> {
                 part.smoke_expires.retain(|r| keep(r.tick));
                 part.grenade_throws.retain(|r| keep(r.tick));
                 part.grenade_trajectories.retain(|r| keep(r.start_tick));
+                part.inferno_fires.retain(|r| keep(r.start_tick));
+                part.weapon_spans.retain(|r| keep(r.start_tick));
                 part.round_side_samples.retain(|r| keep(r.tick));
                 part.economy_raw.retain(|r| keep(r.tick));
             }
@@ -201,6 +211,8 @@ pub fn merge_raw(mut parts: Vec<RawDemo>) -> Result<RawDemo> {
         merged.smoke_expires.extend(p.smoke_expires);
         merged.grenade_throws.extend(p.grenade_throws);
         merged.grenade_trajectories.extend(p.grenade_trajectories);
+        merged.inferno_fires.extend(p.inferno_fires);
+        merged.weapon_spans.extend(p.weapon_spans);
         merged.replay_cols.extend_from(p.replay_cols);
         merged.duel_cols.extend_from(p.duel_cols);
         merged.duel_windows.extend(p.duel_windows);

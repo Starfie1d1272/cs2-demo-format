@@ -3,6 +3,26 @@
 All notable changes to cs2-demo-format are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](https://semver.org/)
 
+## 5.0.0 — 2026-11-28
+
+### Breaking Changes
+
+- **纯 Rust `cs2df` 正式切换与移除 Python 实现**：删除 `python/`、`tools/validate.py` 与 `publish-pypi.yml`，仓库不再依赖 Python 运行时；新增三平台原生二进制 GitHub Releases 发行流水线（`aarch64-apple-darwin`、`x86_64-pc-windows-msvc`、`x86_64-unknown-linux-gnu`）。
+- **版本一致性检查 TS 化**：`pnpm check:versions` 改由 `scripts/check-versions.ts` 执行，校验 `package.json`、`crates/cs2df/Cargo.toml` 与 `schemas/index.ts` 版本一致。
+
+### Added
+
+- **数据合同升级至 `cs2-demo-format/3.1`**：
+  - `kills.json`：新增可选 `killerBlinded?: boolean`。
+  - `players.json`：新增可选 `crosshairCode?: string | null`。
+  - `bombs.json`：`type` 枚举新增 `'plant_abort' | 'defuse_abort'`。
+  - `replay.json`：复用 `flags` 高位 bit（`8=FLAG_HAS_HELMET`、`16=FLAG_IS_SCOPED`、`32=FLAG_IS_WALKING`、`64=FLAG_IS_AIRBORNE`、`128=FLAG_IS_DUCKING`、`256=FLAG_IS_IN_RELOAD`），新增可选 `ammo` 列（`active_weapon_ammo`）。
+  - `duels.json`：新增可选 `flags` 战斗姿态位掩码列。
+  - `shots.json`：新增可选 `aimPunchX`、`aimPunchY`、`accuracyPenalty`、`recoilIdx`、`ammo`、`flags` 列。
+  - `grenades.json`：为燃烧弹/燃烧瓶（`CInferno`）新增可选 `firePoints`（去重整数世界坐标点集）。
+  - `weapons.json`：新增可选地面武器生命周期状态变更事件文件（`dropped` / `picked_up` / `round_end`）。
+- **TypeScript 消费端 `3.x` 前向兼容**：`parser/index.ts` 支持 `cs2-demo-format/3.x`，递归放宽消费端校验以忽略未来小版本新增的可选字段，并跳过未注册的 `manifest.files` 可选文件键。
+
 ## 4.0.0 — 2026-11-28
 
 ### Breaking Changes

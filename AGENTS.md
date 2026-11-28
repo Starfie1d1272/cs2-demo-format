@@ -6,15 +6,15 @@ Repository guidance for Codex/Claude agents working on `cs2-demo-format`.
 
 ```bash
 pnpm typecheck              # tsc --noEmit — covers schemas/, parser/, scripts/
-pnpm check:versions         # ensure npm package, Python package, and cs2df agree
+pnpm check:versions         # ensure package.json, crates/cs2df/Cargo.toml, and schemas/index.ts agree
 pnpm gen:schema             # regenerate spec/*.schema.json from Zod schemas
 pnpm validate:fixtures      # strict v3 fixture validation; legacy fixtures skipped
+pnpm test:parser            # verify 3.0, 3.1, and 3.x forward-compatible TS parsing
 
-cd python && uv sync        # set up Python reference exporter
-uv run cs2df export <dem>   # export a .dem to v3 ZIP
-uv run cs2df validate <zip> # validate any v3 ZIP
-
-python3 tools/validate.py export.zip  # thin wrapper (→ cs2df validate)
+cargo test --workspace      # run Rust tests (cs2df + demoparser)
+cargo build --release -p cs2df
+./target/release/cs2df export <dem>       # export a .dem to v3.1 ZIP
+./target/release/cs2df validate <zip>     # validate any 3.0 / 3.1 ZIP
 ```
 
 ## Architecture
@@ -22,19 +22,19 @@ python3 tools/validate.py export.zip  # thin wrapper (→ cs2df validate)
 | Layer | Path | Purpose |
 |---|---|---|
 | Strict schema source | `schemas/index.ts` | Zod definitions for all ZIP files |
-| Generated contract | `spec/*.schema.json` | JSON Schema for Python/Go/etc. consumers |
-| Reference parser | `parser/index.ts` | Strict ZIP parser and schema validator |
-| Reference exporter | `python/src/cs2df/` | Vectorized Python exporter CLI (demoparser2 → v3 ZIP) |
+| Generated contract | `spec/*.schema.json` | JSON Schema for non-TypeScript consumers |
+| Reference parser | `parser/index.ts` | 3.x forward-compatible ZIP parser |
+| Reference exporter | `crates/cs2df/` | Pure-Rust exporter & validator CLI (`cs2df`) |
 | Human contract | `docs/field-contract.md` | File-by-file field semantics and calculation rules |
-| Validators | `scripts/validate-fixtures.ts`, `tools/validate.py` | Schema and package-level QA |
+| Validators | `scripts/validate-fixtures.ts`, `scripts/test-parser.ts` | Schema, forward-compat, and package-level QA |
 
 `schemas/index.ts` is the single source of truth for machine validation. After
 any schema change, run `pnpm gen:schema` and commit the updated `spec/` files.
 
 ## v3 Contract
 
-- Current package version: tracked in `package.json` and `python/pyproject.toml` (verified via `pnpm check:versions`).
-- Current manifest version: `schemaVersion: "cs2-demo-format/3.0"`.
+- Current package version: tracked in `package.json`, `crates/cs2df/Cargo.toml`, and `schemas/index.ts` header (verified via `pnpm check:versions`).
+- Current manifest version: `schemaVersion: "cs2-demo-format/3.1"` (validators accept `3.0` and `3.1`; TS consumer accepts `3.x`).
 - Player references: `playerIndex` (zero-based index into players.json) replaces
   `steamId64` in all event/aggregate files. steamId64 appears only in players.json.
 - Team/side fields removed from event rows: derived from `players[playerIndex].teamKey`
@@ -60,8 +60,8 @@ playerStats.adr = damageHealth / rounds
   changes → major.
 - New optional fields or new generated schemas → minor.
 - Documentation-only fixes → patch.
-- For releases, update `package.json`, `python/pyproject.toml`,
-  `python/src/cs2df/__init__.py`, `schemas/index.ts` header, `README.md`,
+- For releases, update `package.json`, `crates/cs2df/Cargo.toml`,
+  `schemas/index.ts` header, `README.md`, `README.zh-CN.md`,
   `CHANGELOG.md`, regenerate `spec/` if schemas changed, run
   `pnpm check:versions`, verify, then tag `vX.Y.Z`.
 

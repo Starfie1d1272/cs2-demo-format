@@ -15,14 +15,14 @@ use zip::{CompressionMethod, ZipWriter};
 use crate::enums::GrenadeType;
 use crate::events::{
     build_blinds, build_bombs, build_clutches, build_damages, build_economies, build_grenades,
-    build_kills, build_match, build_player_stats, build_players, round_f64,
+    build_kills, build_match, build_player_stats, build_players, build_weapons, round_f64,
 };
 use crate::merge::parse_and_merge;
 use crate::parse::{parse_demo, ParseOptions, ProgressFn, RawDemo};
 use crate::rounds::build_rounds;
 use crate::streams::{build_duels, build_replay, build_shots};
 
-pub const SCHEMA_VERSION: &str = "cs2-demo-format/3.0";
+pub const SCHEMA_VERSION: &str = "cs2-demo-format/3.1";
 pub const EXPORTER_NAME: &str = "cs2df";
 pub const EXPORTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const PARSER_NAME: &str = "demoparser";
@@ -252,9 +252,11 @@ where
         &raw.grenade_detonations,
         &raw.inferno_expires,
         &raw.smoke_expires,
+        &raw.inferno_fires,
         &players,
         &round_model,
     );
+    let weapons = build_weapons(&raw.weapon_spans, &players, &round_model);
     let mut flash_lookup: HashMap<(i64, i64), String> = HashMap::new();
     for g in &grenades {
         if g.grenade == GrenadeType::Flashbang {
@@ -351,6 +353,9 @@ where
     }
     if duels.is_some() {
         files.insert("duels".to_string(), "duels.json".to_string());
+    }
+    if !weapons.is_empty() {
+        files.insert("weapons".to_string(), "weapons.json".to_string());
     }
 
     let map_name = raw
@@ -456,6 +461,10 @@ where
         if let Some(s) = shots {
             zw.start_file("shots.json", options)?;
             serde_json::to_writer(&mut zw, &s)?;
+        }
+        if !weapons.is_empty() {
+            zw.start_file("weapons.json", options)?;
+            serde_json::to_writer(&mut zw, &weapons)?;
         }
         if let Some(r) = replay {
             zw.start_file("replay.json", options)?;

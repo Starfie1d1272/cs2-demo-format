@@ -18,6 +18,12 @@
           "teamA",
           "teamB"
         ]
+      },
+      "crosshairCode": {
+        "type": [
+          "string",
+          "null"
+        ]
       }
     },
     "required": [

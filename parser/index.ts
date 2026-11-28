@@ -1,10 +1,10 @@
 /**
- * cs2-demo-format — Reference Parser (v3)
+ * cs2-demo-format — Reference Parser (v3.x forward-compatible)
  *
  * Parses a CS2 demo export ZIP buffer into a typed in-memory object.
- * Validates every file against the canonical schemas defined in `schemas/index.ts`.
- * The parser is intentionally strict: producers must emit valid JSON and must
- * not rely on consumers to sanitize NaN/Infinity or filter warmup rows.
+ * Validates every known file against the schemas defined in `schemas/index.ts`,
+ * while tolerating future 3.x minor versions, unknown optional fields, and
+ * unregistered optional manifest file keys.
  *
  * Usage:
  *   import { parseDemoPackage } from "cs2-demo-format/parser";
@@ -12,11 +12,12 @@
  *   console.log(parsed.files.playerStats); // typed PlayerStatsRow[]
  *
  * v3 streams (shots/replay/duels) are columnar with delta-encoded arrays; use
- * `decodeDelta` (re-exported here) or `decodeReplayTrack` to materialize
+ * `decodeDelta` (re-exported here) or `decodeTrackFrames` to materialize
  * absolute per-frame values.
  */
 
 import JSZip from 'jszip';
+import { z } from 'zod';
 import {
   manifestSchema,
   SCHEMAS_BY_KEY,
@@ -38,9 +39,21 @@ import {
   type ReplayPlayerTrack,
   type Duels,
   type DuelPlayerTrack,
+  type WeaponEventRow,
 } from '../schemas/index.js';
 
-export { decodeDelta, FLAG_ALIVE, FLAG_HAS_BOMB, FLAG_HAS_DEFUSE_KIT } from '../schemas/index.js';
+export {
+  decodeDelta,
+  FLAG_ALIVE,
+  FLAG_HAS_BOMB,
+  FLAG_HAS_DEFUSE_KIT,
+  FLAG_HAS_HELMET,
+  FLAG_IS_SCOPED,
+  FLAG_IS_WALKING,
+  FLAG_IS_AIRBORNE,
+  FLAG_IS_DUCKING,
+  FLAG_IS_IN_RELOAD,
+} from '../schemas/index.js';
 
 export interface ParsedDemoPackage {
   manifest: Manifest;
@@ -59,11 +72,67 @@ export interface ParsedDemoPackage {
     shots?: Shots;
     replay?: Replay;
     duels?: Duels;
+    weapons?: WeaponEventRow[];
   };
 }
 
 /**
+ * Recursively strip `.strict()` from a Zod schema so consumers tolerate
+ * additional optional fields introduced in future `3.x` minor versions.
+ */
+function loosenSchema<T extends z.ZodTypeAny>(schema: T): z.ZodTypeAny {
+  const def = (
+    schema as unknown as {
+      def?: {
+        type?: string;
+        element?: z.ZodTypeAny;
+        innerType?: z.ZodTypeAny;
+        defaultValue?: unknown;
+      };
+    }
+  ).def;
+  const type = def?.type;
+  if (type === 'object') {
+    const obj = schema as unknown as { shape: Record<string, z.ZodTypeAny> };
+    const nextShape: Record<string, z.ZodTypeAny> = {};
+    for (const [k, v] of Object.entries(obj.shape)) {
+      nextShape[k] = loosenSchema(v);
+    }
+    return z.object(nextShape);
+  }
+  if (type === 'array' && def?.element) {
+    return z.array(loosenSchema(def.element));
+  }
+  if (type === 'optional' && def?.innerType) {
+    return loosenSchema(def.innerType).optional();
+  }
+  if (type === 'nullable' && def?.innerType) {
+    return loosenSchema(def.innerType).nullable();
+  }
+  if (type === 'default' && def?.innerType) {
+    return loosenSchema(def.innerType).default(def.defaultValue);
+  }
+  return schema;
+}
+
+const consumerManifestSchema = (
+  loosenSchema(manifestSchema) as z.ZodObject<Record<string, z.ZodTypeAny>>
+).extend({
+  schemaVersion: z.string().regex(/^cs2-demo-format\/3\.\d+$/),
+  files: (
+    loosenSchema(manifestSchema.shape.files) as z.ZodObject<Record<string, z.ZodTypeAny>>
+  ).catchall(z.string().min(1)),
+});
+
+const CONSUMER_SCHEMAS_BY_KEY: Record<string, z.ZodTypeAny> = Object.fromEntries(
+  Object.entries(SCHEMAS_BY_KEY).map(([k, s]) => [k, loosenSchema(s)]),
+);
+
+/**
  * Parse a CS2 demo export ZIP into validated, typed in-memory data.
+ *
+ * Forward-compatible across `cs2-demo-format/3.x`: unknown optional fields
+ * and unregistered optional manifest file keys are tolerated without error.
  *
  * @param buffer  ZIP file contents as Buffer or ArrayBuffer.
  * @throws        If the ZIP is malformed, missing required files, or fails schema validation.
@@ -75,7 +144,7 @@ export async function parseDemoPackage(buffer: Buffer | ArrayBuffer): Promise<Pa
   if (!manifestFile) throw new Error('ZIP is missing manifest.json');
 
   const manifestRaw = JSON.parse(await manifestFile.async('text'));
-  const manifest = manifestSchema.parse(manifestRaw);
+  const manifest = consumerManifestSchema.parse(manifestRaw) as Manifest;
 
   const files: Record<string, unknown> = {};
 
@@ -83,11 +152,13 @@ export async function parseDemoPackage(buffer: Buffer | ArrayBuffer): Promise<Pa
     const entry = zip.file(filename);
     if (!entry) throw new Error(`ZIP is missing file: ${filename} (key: ${key})`);
 
+    const schema = CONSUMER_SCHEMAS_BY_KEY[key];
+    if (!schema) {
+      // Forward-compatible: skip unregistered optional file keys from future 3.x minor versions.
+      continue;
+    }
+
     const raw = JSON.parse(await entry.async('text'));
-    const schema = (SCHEMAS_BY_KEY as Record<string, { parse: (v: unknown) => unknown }>)[key];
-
-    if (!schema) throw new Error(`Unknown manifest file key: ${key}`);
-
     files[key] = schema.parse(raw);
   }
 

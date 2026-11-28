@@ -62,6 +62,10 @@ match.zip
 
 ## 版本亮点
 
+- **v5.0.0 正式切换纯 Rust `cs2df` 单二进制并升级至 `cs2-demo-format/3.1`。**
+  移除旧 Python 实现，通过 GitHub Releases 提供 macOS Apple Silicon / Linux x64 /
+  Windows x64 预编译二进制；新增 `3.1` 高信息密度扩展，并将 TypeScript 消费端
+  升级为 `3.x` 前向兼容。
 - **v4.0.0 升级至 Zod 4 与 Python >= 3.14 工具链。** 迁移原生 Zod 4 schema
   与 `z.toJSONSchema`，将整数校验收紧为 JS 安全整数范围；ZIP 协议版本仍为
   `"cs2-demo-format/3.0"`，继续与 `3.x` 导出和消费端互通。
@@ -92,30 +96,28 @@ match.zip
 
 ## 快速开始：导出 demo
 
-参考 exporter 在 [`python/`](./python/) 中，底层使用
-[`demoparser2`](https://github.com/LaihoE/demoparser)。
+从 [GitHub Releases](https://github.com/Starfie1d1272/cs2-demo-format/releases) 下载对应平台
+（macOS Apple Silicon / Linux x64 / Windows x64）的 `cs2df` 单二进制，或从源码编译
+`cargo build --release -p cs2df`：
 
 ```bash
-cd python
-uv sync
-
-# 标准导出：必需文件 + shots.json + replay.json
-uv run cs2df export match.dem
+# 标准导出：必需文件 + shots.json + replay.json + weapons.json
+cs2df export match.dem
 
 # 多段 GOTV 录像（HLTV 分段 demo）— 合并为一个 ZIP
-uv run cs2df export match-p1.dem match-p2.dem
+cs2df export match-p1.dem match-p2.dem
 
 # Research 导出：额外包含满 tick duels.json
-uv run cs2df export match.dem --research
+cs2df export match.dem --research
 
-# 校验结果
-uv run cs2df validate match.zip --strict
+# 校验任意 3.0 / 3.1 导出包
+cs2df validate match.zip --strict
 ```
 
 批量导出一个 demo 目录：
 
 ```bash
-uv run cs2df export-batch ./demos --workers 8 --descriptive
+cs2df export-batch ./demos --workers 4 --descriptive
 ```
 
 `export-batch` 会为每个 `.dem` 写出一个 ZIP，并额外生成 `report.json`，包含每场
@@ -169,7 +171,7 @@ cat fixtures/v3-mid/match.json
 
 合法 v3 包保证：
 
-- `schemaVersion` 必须是 `"cs2-demo-format/3.0"`。
+- `schemaVersion` 为 `"cs2-demo-format/3.1"`（兼容历史 `"cs2-demo-format/3.0"`；TS 消费端兼容 `3.x`）。
 - `players.json` 行序是规范；行号即 `playerIndex`。
 - `roundNumber` 从 `1` 开始，只覆盖正式回合。
 - 事件里的 `roundNumber` 必须存在于 `rounds.json`。
@@ -189,8 +191,7 @@ cat fixtures/v3-mid/match.json
 | [`schemas/index.ts`](./schemas/index.ts) | canonical Zod schema、TypeScript 类型和解码 helper。 |
 | [`spec/`](./spec/) | 供非 TypeScript consumer 使用的生成 JSON Schema。 |
 | [`parser/index.ts`](./parser/index.ts) | 参考 TypeScript ZIP parser 和 schema validator。 |
-| [`python/`](./python/) | 参考 Python exporter / validator CLI（`cs2df`）。 |
-| [`tools/validate.py`](./tools/validate.py) | `cs2df validate` 的薄包装。 |
+| [`crates/cs2df/`](./crates/cs2df/) | 纯 Rust 参考 exporter / validator CLI（`cs2df`）。 |
 | [`docs/field-contract.md`](./docs/field-contract.md) | 按文件说明字段语义和计算规则。 |
 | [`fixtures/`](./fixtures/) | v3 golden fixture 和历史 legacy fixture。 |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 发布历史。 |
@@ -206,7 +207,7 @@ pnpm validate:fixtures
 
 ## 已知实现
 
-- **参考 producer：** [`python/cs2df`](./python/)
+- **参考 producer：** [`crates/cs2df`](./crates/cs2df/)
 - **Producer / toolkit：** [`cs2-demo-analysis-kit`](https://github.com/Starfie1d1272/cs2-demo-analysis-kit)
 - **Consumer：** [`RivalHub`](https://github.com/Starfie1d1272/RivalHub)
 - **原始事件提取出处：**
@@ -223,7 +224,7 @@ pnpm validate:fixtures
 
 发布 tag 使用 `vX.Y.Z` 格式。
 打 tag 前运行 `pnpm check:versions`，确保 `package.json`、
-`python/pyproject.toml` 和 `cs2df.__version__` 一致。
+`crates/cs2df/Cargo.toml` 和 `schemas/index.ts` 一致。
 
 ## License
 

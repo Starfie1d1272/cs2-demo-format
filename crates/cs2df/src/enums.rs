@@ -109,8 +109,10 @@ pub enum EconomyType {
 #[serde(rename_all = "snake_case")]
 pub enum BombEventKind {
     PlantBegin,
+    PlantAbort,
     Planted,
     DefuseBegin,
+    DefuseAbort,
     Defused,
     Exploded,
     Dropped,

@@ -36,6 +36,7 @@ fn make_players() -> PlayerDirectory {
                     steam_id64: num.to_string(),
                     name: i.to_string(),
                     team_key: *t,
+                    crosshair_code: None,
                     steam_id_num: num,
                 }
             })
@@ -63,6 +64,7 @@ fn make_kill(killer: Option<usize>, victim: usize, tick: i64, round_number: i64)
         penetrated_objects: 0,
         killer_position: None,
         victim_position: Pos3 { x: 0, y: 0, z: 0 },
+        killer_blinded: false,
     }
 }
 
@@ -100,6 +102,8 @@ fn empty_raw(tickrate: i64) -> RawDemo {
         smoke_expires: Vec::new(),
         grenade_throws: Vec::new(),
         grenade_trajectories: Vec::new(),
+        inferno_fires: Vec::new(),
+        weapon_spans: Vec::new(),
         replay_cols: ReplayColumns::default(),
         replay_ticks: Vec::new(),
         duel_cols: DuelColumns::default(),
@@ -146,12 +150,14 @@ fn kills_after_round_end_before_next_start_are_kept_in_previous_round() {
             steam_id64: "76561198000000001".to_string(),
             name: "attacker".to_string(),
             team_key: TeamKey::TeamA,
+            crosshair_code: None,
             steam_id_num: 76561198000000001,
         },
         PlayerRow {
             steam_id64: "76561198000000002".to_string(),
             name: "victim".to_string(),
             team_key: TeamKey::TeamB,
+            crosshair_code: None,
             steam_id_num: 76561198000000002,
         },
     ]);
@@ -191,6 +197,7 @@ fn kills_after_round_end_before_next_start_are_kept_in_previous_round() {
         thrusmoke: false,
         noscope: false,
         penetrated: 0,
+        attackerblind: false,
         attacker_x: None,
         attacker_y: None,
         attacker_z: None,
@@ -239,12 +246,14 @@ fn round_restart_keeps_previous_result_and_excludes_abandoned_ticks() {
             steam_id64: "76561198000000001".to_string(),
             name: "attacker".to_string(),
             team_key: TeamKey::TeamA,
+            crosshair_code: None,
             steam_id_num: 76561198000000001,
         },
         PlayerRow {
             steam_id64: "76561198000000002".to_string(),
             name: "victim".to_string(),
             team_key: TeamKey::TeamB,
+            crosshair_code: None,
             steam_id_num: 76561198000000002,
         },
     ]);
@@ -419,6 +428,7 @@ fn builder_uses_demo_tickrate_and_sorts_parser_rows() {
         thrusmoke: false,
         noscope: false,
         penetrated: 0,
+        attackerblind: false,
         attacker_x: None,
         attacker_y: None,
         attacker_z: None,
@@ -566,6 +576,7 @@ fn replay_round_extends_to_sample_before_next_round_start() {
         steam_id64: "76561198000000001".to_string(),
         name: "p1".to_string(),
         team_key: TeamKey::TeamA,
+        crosshair_code: None,
         steam_id_num: 76561198000000001,
     }]);
     let model = RoundModel::new(
@@ -604,6 +615,7 @@ fn replay_marks_round_start_bomb_carrier_from_inventory() {
         steam_id64: "76561198000000001".to_string(),
         name: "p1".to_string(),
         team_key: TeamKey::TeamA,
+        crosshair_code: None,
         steam_id_num: 76561198000000001,
     }]);
     let model = RoundModel::new(

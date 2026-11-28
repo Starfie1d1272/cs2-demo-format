@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: "1.100.0"
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Build release binary
+        run: cargo build --release -p cs2df --target ${{ matrix.target }}
+
+      - name: Smoke test & package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          BIN="./target/${{ matrix.target }}/release/cs2df"
+          "$BIN" --version
+          (cd fixtures/v3-mid && zip -q /tmp/v3-mid.zip *.json)
+          "$BIN" validate /tmp/v3-mid.zip --strict
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cp "$BIN" dist/cs2df
+          cp LICENSE README.md dist/
+          tar -C dist -czf "cs2df-v${VERSION}-${{ matrix.target }}.tar.gz" cs2df LICENSE README.md
+
+      - name: Smoke test & package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "./target/${{ matrix.target }}/release/cs2df.exe"
+          & $bin --version
+          Compress-Archive -Path fixtures/v3-mid/*.json -DestinationPath $env:TEMP/v3-mid.zip -Force
+          & $bin validate $env:TEMP/v3-mid.zip --strict
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $bin dist/cs2df.exe
+          Copy-Item LICENSE, README.md dist/
+          Compress-Archive -Path dist/* -DestinationPath "cs2df-v${version}-${{ matrix.target }}.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cs2df-${{ matrix.target }}
+          path: |
+            cs2df-v*.tar.gz
+            cs2df-v*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt & publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd artifacts
+          sha256sum cs2df-v* > SHA256SUMS.txt
+          gh release create "${{ github.ref_name }}" cs2df-v* SHA256SUMS.txt \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
