@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use serde::Serialize;
 
-use crate::enums::normalize_round_end_reason;
+use crate::enums::{normalize_round_end_reason, EconomyType, Side, TeamKey};
 
 #[derive(Debug, Clone)]
 pub struct RoundMarkerRow {
@@ -40,7 +40,7 @@ pub struct RoundWindow {
 #[derive(Debug, Clone)]
 pub struct RoundModel {
     pub windows: Vec<RoundWindow>,
-    pub side_map: HashMap<(i64, String), String>,
+    pub side_map: HashMap<(i64, TeamKey), Side>,
     by_round: HashMap<i64, RoundWindow>,
     event_end_by_round: HashMap<i64, i64>,
     sorted_starts: Vec<i64>,
@@ -48,7 +48,7 @@ pub struct RoundModel {
 }
 
 impl RoundModel {
-    pub fn new(windows: Vec<RoundWindow>, side_map: HashMap<(i64, String), String>) -> Self {
+    pub fn new(windows: Vec<RoundWindow>, side_map: HashMap<(i64, TeamKey), Side>) -> Self {
         let mut by_round = HashMap::with_capacity(windows.len());
         for w in &windows {
             by_round.insert(w.round_number, w.clone());
@@ -124,25 +124,22 @@ pub struct RoundRow {
     pub start_tick: i64,
     pub freeze_end_tick: i64,
     pub end_tick: i64,
-    pub team_a_side: String,
-    pub team_b_side: String,
+    pub team_a_side: Side,
+    pub team_b_side: Side,
     pub team_a_score_before: i64,
     pub team_b_score_before: i64,
-    pub team_a_economy: String,
-    pub team_b_economy: String,
-    pub winner_team_key: String,
-    pub winner_side: String,
+    pub team_a_economy: EconomyType,
+    pub team_b_economy: EconomyType,
+    pub winner_team_key: TeamKey,
+    pub winner_side: Side,
     pub end_reason: String,
 }
 
-pub fn format_sid(val: Option<u64>) -> Option<String> {
+#[inline]
+pub fn valid_sid64(val: Option<u64>) -> Option<u64> {
     let v = val?;
-    if v == 0 {
-        return None;
-    }
-    let s = v.to_string();
-    if s.len() == 17 {
-        Some(s)
+    if (10_000_000_000_000_000..100_000_000_000_000_000).contains(&v) {
+        Some(v)
     } else {
         None
     }
@@ -152,7 +149,7 @@ pub fn resolve_round_attempts(
     round_starts: &[RoundMarkerRow],
     round_freeze_ends: &[RoundMarkerRow],
     round_ends: &[RoundMarkerRow],
-) -> Vec<(RoundWindow, RoundMarkerRow, &'static str)> {
+) -> Vec<(RoundWindow, RoundMarkerRow, Side)> {
     let mut markers: Vec<(i64, u8, &RoundMarkerRow)> =
         Vec::with_capacity(round_starts.len() + round_freeze_ends.len() + round_ends.len());
     for (kind, rows) in [
@@ -172,7 +169,7 @@ pub fn resolve_round_attempts(
 
     let mut starts: HashMap<i64, i64> = HashMap::new();
     let mut freezes: HashMap<i64, i64> = HashMap::new();
-    let mut completed: BTreeMap<i64, (RoundWindow, RoundMarkerRow, &'static str)> = BTreeMap::new();
+    let mut completed: BTreeMap<i64, (RoundWindow, RoundMarkerRow, Side)> = BTreeMap::new();
 
     for (tick, kind, row) in markers {
         let number = row.total_rounds_played + if kind != 2 { 1 } else { 0 };
@@ -200,8 +197,8 @@ pub fn resolve_round_attempts(
             _ => {
                 let winner_str = row.winner.as_deref().unwrap_or("").to_ascii_lowercase();
                 let winner_side = match winner_str.as_str() {
-                    "t" | "2" => "t",
-                    "ct" | "3" => "ct",
+                    "t" | "2" => Side::T,
+                    "ct" | "3" => Side::Ct,
                     _ => continue,
                 };
                 let freeze = freezes.get(&number).copied().unwrap_or(0);
@@ -231,12 +228,12 @@ pub fn build_rounds(
     round_ends: &[RoundMarkerRow],
     round_side_samples: &[SideSampleRow],
     player_info: &[PlayerInfoRow],
-    team_map: &HashMap<String, String>,
+    team_map: &HashMap<u64, TeamKey>,
 ) -> (Vec<RoundRow>, RoundModel) {
     let mut team_a_score = 0i64;
     let mut team_b_score = 0i64;
     let mut out = Vec::new();
-    let mut side_map: HashMap<(i64, String), String> = HashMap::new();
+    let mut side_map: HashMap<(i64, TeamKey), Side> = HashMap::new();
     let mut windows = Vec::new();
 
     let attempts = resolve_round_attempts(round_starts, round_freeze_ends, round_ends);
@@ -245,12 +242,12 @@ pub fn build_rounds(
         let fz_tick = window.freeze_end_tick;
         let (team_a_side, team_b_side) =
             sides_for_round(round_side_samples, player_info, team_map, n, Some(fz_tick));
-        side_map.insert((n, "teamA".to_string()), team_a_side.clone());
-        side_map.insert((n, "teamB".to_string()), team_b_side.clone());
+        side_map.insert((n, TeamKey::TeamA), team_a_side);
+        side_map.insert((n, TeamKey::TeamB), team_b_side);
         let winner_key = if team_a_side == winner_side {
-            "teamA"
+            TeamKey::TeamA
         } else {
-            "teamB"
+            TeamKey::TeamB
         };
 
         if window.start_tick > 0 && fz_tick > 0 {
@@ -263,20 +260,19 @@ pub fn build_rounds(
                 team_b_side,
                 team_a_score_before: team_a_score,
                 team_b_score_before: team_b_score,
-                team_a_economy: "semi".to_string(),
-                team_b_economy: "semi".to_string(),
-                winner_team_key: winner_key.to_string(),
-                winner_side: winner_side.to_string(),
+                team_a_economy: EconomyType::Semi,
+                team_b_economy: EconomyType::Semi,
+                winner_team_key: winner_key,
+                winner_side,
                 end_reason: normalize_round_end_reason(end.reason_str.as_deref(), end.reason_num)
                     .to_string(),
             });
             windows.push(window);
         }
 
-        if winner_key == "teamA" {
-            team_a_score += 1;
-        } else {
-            team_b_score += 1;
+        match winner_key {
+            TeamKey::TeamA => team_a_score += 1,
+            TeamKey::TeamB => team_b_score += 1,
         }
     }
 
@@ -286,56 +282,38 @@ pub fn build_rounds(
 fn sides_for_round(
     round_side_samples: &[SideSampleRow],
     player_info: &[PlayerInfoRow],
-    team_map: &HashMap<String, String>,
+    team_map: &HashMap<u64, TeamKey>,
     round_number: i64,
     freeze_end_tick: Option<i64>,
-) -> (String, String) {
+) -> (Side, Side) {
     if let Some(sampled) =
         sampled_side_for_round(round_side_samples, team_map, round_number, freeze_end_tick)
     {
         return sampled;
     }
 
-    let start_side_by_team = starting_side_by_team(player_info, team_map);
-    let team_a_initial = start_side_by_team
-        .get("teamA")
-        .map(String::as_str)
-        .unwrap_or("t");
-    let team_b_initial = if team_a_initial == "t" { "ct" } else { "t" };
+    let (team_a_initial, _) = starting_side_by_team(player_info, team_map);
     let team_a_side = if round_number <= 12 {
         team_a_initial
     } else if round_number <= 24 {
-        if team_a_initial == "t" {
-            "ct"
-        } else {
-            "t"
-        }
+        team_a_initial.opposite()
     } else {
         let ot_block = (round_number - 25) / 3;
         if ot_block % 2 == 0 {
-            if team_a_initial == "t" {
-                "ct"
-            } else {
-                "t"
-            }
+            team_a_initial.opposite()
         } else {
             team_a_initial
         }
     };
-    let team_b_side = if team_a_side == team_a_initial {
-        team_b_initial
-    } else {
-        team_a_initial
-    };
-    (team_a_side.to_string(), team_b_side.to_string())
+    (team_a_side, team_a_side.opposite())
 }
 
 fn sampled_side_for_round(
     round_side_samples: &[SideSampleRow],
-    team_map: &HashMap<String, String>,
+    team_map: &HashMap<u64, TeamKey>,
     round_number: i64,
     freeze_end_tick: Option<i64>,
-) -> Option<(String, String)> {
+) -> Option<(Side, Side)> {
     let expected_tick = freeze_end_tick.unwrap_or(0) + 16;
     let mut a_t = 0usize;
     let mut a_ct = 0usize;
@@ -352,85 +330,72 @@ fn sampled_side_for_round(
         {
             continue;
         }
-        let Some(sid) = format_sid(row.steamid) else {
+        let Some(sid) = valid_sid64(row.steamid) else {
             continue;
         };
-        let Some(key) = team_map.get(&sid) else {
+        let Some(&key) = team_map.get(&sid) else {
             continue;
         };
         let side = match row.team_num {
-            Some(2) => "t",
-            Some(3) => "ct",
+            Some(2) => Side::T,
+            Some(3) => Side::Ct,
             _ => continue,
         };
-        match (key.as_str(), side) {
-            ("teamA", "t") => a_t += 1,
-            ("teamA", "ct") => a_ct += 1,
-            ("teamB", "t") => b_t += 1,
-            ("teamB", "ct") => b_ct += 1,
-            _ => {}
+        match (key, side) {
+            (TeamKey::TeamA, Side::T) => a_t += 1,
+            (TeamKey::TeamA, Side::Ct) => a_ct += 1,
+            (TeamKey::TeamB, Side::T) => b_t += 1,
+            (TeamKey::TeamB, Side::Ct) => b_ct += 1,
         }
     }
 
     let team_a_side = majority_side(a_t, a_ct);
     let team_b_side = majority_side(b_t, b_ct);
     match (team_a_side, team_b_side) {
-        (Some(a), Some(b)) if a != b => Some((a.to_string(), b.to_string())),
-        (Some(a), _) => {
-            let b = if a == "t" { "ct" } else { "t" };
-            Some((a.to_string(), b.to_string()))
-        }
-        (None, Some(b)) => {
-            let a = if b == "t" { "ct" } else { "t" };
-            Some((a.to_string(), b.to_string()))
-        }
+        (Some(a), Some(b)) if a != b => Some((a, b)),
+        (Some(a), _) => Some((a, a.opposite())),
+        (None, Some(b)) => Some((b.opposite(), b)),
         (None, None) => None,
     }
 }
 
-fn majority_side(t: usize, ct: usize) -> Option<&'static str> {
+fn majority_side(t: usize, ct: usize) -> Option<Side> {
     if t == ct {
         None
     } else if t > ct {
-        Some("t")
+        Some(Side::T)
     } else {
-        Some("ct")
+        Some(Side::Ct)
     }
 }
 
 fn starting_side_by_team(
     player_info: &[PlayerInfoRow],
-    team_map: &HashMap<String, String>,
-) -> HashMap<String, String> {
+    team_map: &HashMap<u64, TeamKey>,
+) -> (Side, Side) {
     let mut a_t = 0usize;
     let mut a_ct = 0usize;
     let mut b_t = 0usize;
     let mut b_ct = 0usize;
 
     for row in player_info {
-        let Some(sid) = format_sid(row.steamid) else {
+        let Some(sid) = valid_sid64(row.steamid) else {
             continue;
         };
-        let Some(key) = team_map.get(&sid) else {
+        let Some(&key) = team_map.get(&sid) else {
             continue;
         };
-        match (key.as_str(), row.team_num) {
-            ("teamA", Some(2)) => a_t += 1,
-            ("teamA", Some(3)) => a_ct += 1,
-            ("teamB", Some(2)) => b_t += 1,
-            ("teamB", Some(3)) => b_ct += 1,
+        match (key, row.team_num) {
+            (TeamKey::TeamA, Some(2)) => a_t += 1,
+            (TeamKey::TeamA, Some(3)) => a_ct += 1,
+            (TeamKey::TeamB, Some(2)) => b_t += 1,
+            (TeamKey::TeamB, Some(3)) => b_ct += 1,
             _ => {}
         }
     }
 
-    let mut out = HashMap::new();
-    out.insert(
-        "teamA".to_string(),
-        if a_t >= a_ct { "t" } else { "ct" }.to_string(),
-    );
-    out.insert(
-        "teamB".to_string(),
-        if b_t >= b_ct { "t" } else { "ct" }.to_string(),
-    );
-    out
+    (
+        if a_t >= a_ct { Side::T } else { Side::Ct },
+        if b_t >= b_ct { Side::T } else { Side::Ct },
+    )
 }

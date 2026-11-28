@@ -2,29 +2,41 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use cs2df::batch::{
-    aggregate_timings, allocate_unique_zip_path, group_demos_in_dir, strip_part_suffix,
-    BatchItemRow,
+    aggregate_timings, allocate_unique_zip_path, build_descriptive_name, group_demos_in_dir,
+    run_batch, strip_part_suffix, BatchItemRow,
 };
+use cs2df::enums::{Side, TeamKey};
 use cs2df::events::{
     annotate_trades, build_damages, build_kills, DeathRawRow, HurtRawRow, KillRow, PlayerDirectory,
     PlayerRow, Pos3,
 };
 use cs2df::merge::merge_raw;
-use cs2df::parse::{build_sample_ticks, ParseOptions, RawDemo};
+use cs2df::package::{ExportOptions, MatchMeta};
+use cs2df::parse::{build_sample_ticks, parse_demo, ParseOptions, RawDemo};
 use cs2df::rounds::{build_rounds, RoundMarkerRow, RoundModel, RoundWindow};
-use cs2df::streams::{build_replay, delta_encode, ReplayFrameRow};
-use cs2df::validate::{decode_delta, find_invalid_json_tokens, validate_dir_fixture};
+use cs2df::streams::{build_replay, delta_encode, DuelColumns, ReplayColumns};
+use cs2df::validate::{decode_delta, validate_dir_fixture};
 
 fn make_players() -> PlayerDirectory {
-    let teams = ["teamA", "teamA", "teamB", "teamB", "teamA"];
+    let teams = [
+        TeamKey::TeamA,
+        TeamKey::TeamA,
+        TeamKey::TeamB,
+        TeamKey::TeamB,
+        TeamKey::TeamA,
+    ];
     PlayerDirectory::new(
         teams
             .iter()
             .enumerate()
-            .map(|(i, t)| PlayerRow {
-                steam_id64: (76561198000000000u64 + i as u64).to_string(),
-                name: i.to_string(),
-                team_key: (*t).to_string(),
+            .map(|(i, t)| {
+                let num = 76561198000000000u64 + i as u64;
+                PlayerRow {
+                    steam_id64: num.to_string(),
+                    name: i.to_string(),
+                    team_key: *t,
+                    steam_id_num: num,
+                }
             })
             .collect(),
     )
@@ -80,23 +92,16 @@ fn empty_raw(tickrate: i64) -> RawDemo {
         deaths: Vec::new(),
         hurts: Vec::new(),
         fires: Vec::new(),
-        fire_velocity: Vec::new(),
         blinds: Vec::new(),
-        bomb_planted: Vec::new(),
-        bomb_defused: Vec::new(),
-        bomb_exploded: Vec::new(),
-        bomb_beginplant: Vec::new(),
-        bomb_begindefuse: Vec::new(),
-        bomb_dropped: Vec::new(),
-        bomb_pickup: Vec::new(),
+        bomb_events: Vec::new(),
         grenade_detonations: Vec::new(),
         inferno_expires: Vec::new(),
         smoke_expires: Vec::new(),
         grenade_throws: Vec::new(),
         grenade_trajectories: Vec::new(),
-        replay_rows: Vec::new(),
+        replay_cols: ReplayColumns::default(),
         replay_ticks: Vec::new(),
-        duel_rows: Vec::new(),
+        duel_cols: DuelColumns::default(),
         duel_windows: Vec::new(),
         round_side_samples: Vec::new(),
         economy_raw: Vec::new(),
@@ -139,17 +144,19 @@ fn kills_after_round_end_before_next_start_are_kept_in_previous_round() {
         PlayerRow {
             steam_id64: "76561198000000001".to_string(),
             name: "attacker".to_string(),
-            team_key: "teamA".to_string(),
+            team_key: TeamKey::TeamA,
+            steam_id_num: 76561198000000001,
         },
         PlayerRow {
             steam_id64: "76561198000000002".to_string(),
             name: "victim".to_string(),
-            team_key: "teamB".to_string(),
+            team_key: TeamKey::TeamB,
+            steam_id_num: 76561198000000002,
         },
     ]);
     let mut side_map = HashMap::new();
-    side_map.insert((1, "teamA".to_string()), "t".to_string());
-    side_map.insert((1, "teamB".to_string()), "ct".to_string());
+    side_map.insert((1, TeamKey::TeamA), Side::T);
+    side_map.insert((1, TeamKey::TeamB), Side::Ct);
     let model = RoundModel::new(
         vec![
             RoundWindow {
@@ -230,12 +237,14 @@ fn round_restart_keeps_previous_result_and_excludes_abandoned_ticks() {
         PlayerRow {
             steam_id64: "76561198000000001".to_string(),
             name: "attacker".to_string(),
-            team_key: "teamA".to_string(),
+            team_key: TeamKey::TeamA,
+            steam_id_num: 76561198000000001,
         },
         PlayerRow {
             steam_id64: "76561198000000002".to_string(),
             name: "victim".to_string(),
-            team_key: "teamB".to_string(),
+            team_key: TeamKey::TeamB,
+            steam_id_num: 76561198000000002,
         },
     ]);
     let hurts: Vec<HurtRawRow> = [130, 160, 180]
@@ -294,10 +303,7 @@ fn rollback_replaces_scored_attempt_and_discards_later_old_rounds() {
         (rounds[1].start_tick, rounds[1].freeze_end_tick),
         (260, 270)
     );
-    assert_eq!(
-        (rounds[1].end_tick, rounds[1].winner_side.as_str()),
-        (300, "ct")
-    );
+    assert_eq!((rounds[1].end_tick, rounds[1].winner_side), (300, Side::Ct));
     assert_eq!(model.round_for_tick(150), None);
     assert_eq!(model.round_for_tick(230), None);
     assert_eq!(model.round_for_tick(270), Some(2));
@@ -386,8 +392,8 @@ fn unrelated_events_do_not_hide_a_trade_within_window() {
 fn builder_uses_demo_tickrate_and_sorts_parser_rows() {
     let players = make_players();
     let mut side_map = HashMap::new();
-    side_map.insert((1, "teamA".to_string()), "t".to_string());
-    side_map.insert((1, "teamB".to_string()), "ct".to_string());
+    side_map.insert((1, TeamKey::TeamA), Side::T);
+    side_map.insert((1, TeamKey::TeamB), Side::Ct);
     let model = RoundModel::new(
         vec![RoundWindow {
             round_number: 1,
@@ -401,8 +407,8 @@ fn builder_uses_demo_tickrate_and_sorts_parser_rows() {
     let death = |killer: usize, victim: usize, tick: i64| DeathRawRow {
         tick,
         total_rounds_played: 0,
-        user_steamid: Some(players.rows[victim].steam_id64.parse().unwrap()),
-        attacker_steamid: Some(players.rows[killer].steam_id64.parse().unwrap()),
+        user_steamid: Some(players.rows[victim].steam_id_num),
+        attacker_steamid: Some(players.rows[killer].steam_id_num),
         assister_steamid: None,
         weapon: Some("ak47".to_string()),
         attacker_active_weapon: None,
@@ -429,13 +435,8 @@ fn builder_uses_demo_tickrate_and_sorts_parser_rows() {
 
 // ── merge ────────────────────────────────────────────────────────────────────
 
-#[test]
-fn merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue() {
-    let mut p0 = empty_raw(64);
-    p0.round_ends = vec![marker(200, 1, Some("t")), marker(460, 2, Some("ct"))];
-    p0.round_starts = vec![marker(50, 0, None), marker(300, 1, None)];
-    p0.round_freeze_ends = vec![marker(100, 0, None), marker(360, 1, None)];
-    let mk_hurt = |tick: i64| HurtRawRow {
+fn mk_hurt(tick: i64) -> HurtRawRow {
+    HurtRawRow {
         tick,
         total_rounds_played: 0,
         user_steamid: None,
@@ -451,7 +452,15 @@ fn merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue() {
         user_x: None,
         user_y: None,
         user_z: None,
-    };
+    }
+}
+
+#[test]
+fn merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue() {
+    let mut p0 = empty_raw(64);
+    p0.round_ends = vec![marker(200, 1, Some("t")), marker(460, 2, Some("ct"))];
+    p0.round_starts = vec![marker(50, 0, None), marker(300, 1, None)];
+    p0.round_freeze_ends = vec![marker(100, 0, None), marker(360, 1, None)];
     p0.hurts = vec![mk_hurt(150), mk_hurt(400)];
 
     let mut p1 = empty_raw(64);
@@ -489,6 +498,36 @@ fn merge_two_parts_keeps_seam_round_shifts_ticks_and_trims_residue() {
 }
 
 #[test]
+fn merge_three_parts_avoids_double_offset_and_sums_timings() {
+    let mut p0 = empty_raw(64);
+    p0.timings.insert("parse.total".to_string(), 1.25);
+    p0.round_starts = vec![marker(50, 0, None)];
+    p0.round_freeze_ends = vec![marker(100, 0, None)];
+    p0.round_ends = vec![marker(500, 1, Some("t"))];
+
+    let mut p1 = empty_raw(64);
+    p1.timings.insert("parse.total".to_string(), 2.5);
+    p1.round_starts = vec![marker(50, 1, None)];
+    p1.round_freeze_ends = vec![marker(100, 1, None)];
+    p1.round_ends = vec![marker(600, 2, Some("ct"))];
+
+    let mut p2 = empty_raw(64);
+    p2.timings.insert("parse.total".to_string(), 3.75);
+    p2.round_starts = vec![marker(50, 2, None)];
+    p2.round_freeze_ends = vec![marker(100, 2, None)];
+    p2.round_ends = vec![marker(700, 3, Some("t"))];
+
+    // Expected shifts (gap = 64 * 8 = 512):
+    // p0: offset 0 -> max_tick 500
+    // p1: offset 500 + 512 = 1012 -> p1.end = 1612
+    // p2: offset 1612 + 512 = 2124 -> p2.end = 2824 (NOT 500+512 + 1612+512!)
+    let merged = merge_raw(vec![p0, p1, p2]).unwrap();
+    let end_ticks: Vec<i64> = merged.round_ends.iter().map(|r| r.tick).collect();
+    assert_eq!(end_ticks, vec![500, 1612, 2824]);
+    assert_eq!(merged.timings.get("parse.total").copied(), Some(7.5));
+}
+
+#[test]
 fn single_part_passthrough() {
     let mut p0 = empty_raw(64);
     p0.round_ends = vec![marker(200, 1, Some("t"))];
@@ -498,25 +537,26 @@ fn single_part_passthrough() {
 
 // ── replay boundaries ────────────────────────────────────────────────────────
 
-fn replay_row(tick: i64, inv: Vec<String>) -> ReplayFrameRow {
-    ReplayFrameRow {
-        tick,
-        steamid: Some(76561198000000001),
-        x: Some(tick as f64),
-        y: Some((tick + 1) as f64),
-        z: Some((tick + 2) as f64),
-        yaw: Some(90.0),
-        pitch: Some(0.0),
-        health: Some(100.0),
-        armor: Some(100.0),
-        active_weapon_name: Some("ak47".to_string()),
-        flash_duration: Some(0.0),
-        balance: Some(800.0),
-        current_equip_value: Some(2700.0),
-        has_defuser: false,
-        last_place_name: Some("Middle".to_string()),
-        inventory: inv,
-    }
+fn push_replay_row(cols: &mut ReplayColumns, tick: i64, inv: &[&str]) {
+    cols.ticks.push(tick);
+    cols.steamids.push(Some(76561198000000001));
+    cols.x.push(Some(tick as f32));
+    cols.y.push(Some((tick + 1) as f32));
+    cols.z.push(Some((tick + 2) as f32));
+    cols.yaw.push(Some(90.0));
+    cols.pitch.push(Some(0.0));
+    cols.health.push(Some(100.0));
+    cols.armor.push(Some(100.0));
+    cols.flash_duration.push(Some(0.0));
+    cols.balance.push(Some(800.0));
+    cols.current_equip_value.push(Some(2700.0));
+    cols.has_defuser.push(false);
+    let wc = cols.weapon_dict.index(Some("ak47"));
+    cols.weapon_codes.push(wc);
+    let pc = cols.place_dict.index(Some("Middle"));
+    cols.place_codes.push(pc);
+    let inv_vec: Vec<String> = inv.iter().map(|s| (*s).to_string()).collect();
+    cols.push_inventory(&inv_vec);
 }
 
 #[test]
@@ -524,7 +564,8 @@ fn replay_round_extends_to_sample_before_next_round_start() {
     let players = PlayerDirectory::new(vec![PlayerRow {
         steam_id64: "76561198000000001".to_string(),
         name: "p1".to_string(),
-        team_key: "teamA".to_string(),
+        team_key: TeamKey::TeamA,
+        steam_id_num: 76561198000000001,
     }]);
     let model = RoundModel::new(
         vec![
@@ -545,11 +586,11 @@ fn replay_round_extends_to_sample_before_next_round_start() {
         ],
         HashMap::new(),
     );
-    let rows: Vec<ReplayFrameRow> = (100..360)
-        .step_by(16)
-        .map(|t| replay_row(t, vec![]))
-        .collect();
-    let replay = build_replay(&rows, &[], &players, &model, 128, 8).unwrap();
+    let mut cols = ReplayColumns::default();
+    for t in (100..360).step_by(16) {
+        push_replay_row(&mut cols, t, &[]);
+    }
+    let replay = build_replay(&cols, &[], &players, &model, 128, 8).unwrap();
     let first = &replay.rounds[0];
     let last_tick = first.start_tick + (first.frame_count as i64 - 1) * first.tick_step;
     assert_eq!(last_tick, 292);
@@ -561,7 +602,8 @@ fn replay_marks_round_start_bomb_carrier_from_inventory() {
     let players = PlayerDirectory::new(vec![PlayerRow {
         steam_id64: "76561198000000001".to_string(),
         name: "p1".to_string(),
-        team_key: "teamA".to_string(),
+        team_key: TeamKey::TeamA,
+        steam_id_num: 76561198000000001,
     }]);
     let model = RoundModel::new(
         vec![
@@ -582,11 +624,11 @@ fn replay_marks_round_start_bomb_carrier_from_inventory() {
         ],
         HashMap::new(),
     );
-    let rows: Vec<ReplayFrameRow> = (360..=460)
-        .step_by(16)
-        .map(|t| replay_row(t, vec!["C4 Explosive".to_string()]))
-        .collect();
-    let replay = build_replay(&rows, &[], &players, &model, 128, 8).unwrap();
+    let mut cols = ReplayColumns::default();
+    for t in (360..=460).step_by(16) {
+        push_replay_row(&mut cols, t, &["C4 Explosive"]);
+    }
+    let replay = build_replay(&cols, &[], &players, &model, 128, 8).unwrap();
     let second = &replay.rounds[0];
     assert_eq!(second.round_number, 2);
     assert!(second.players[0].flags.iter().all(|&f| (f & 2) != 0));
@@ -603,6 +645,60 @@ fn parse_replay_ticks_include_post_round_tail_before_next_start() {
 }
 
 // ── batch / cli / validate ───────────────────────────────────────────────────
+
+#[test]
+fn truncated_demo_returns_err_and_batch_isolates_it_with_report() {
+    let tmp = std::env::temp_dir().join(format!("cs2df_trunc_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    let bad_dem = tmp.join("truncated.dem");
+    std::fs::write(&bad_dem, b"short").unwrap();
+
+    let err = parse_demo(&bad_dem, &ParseOptions::default(), None).unwrap_err();
+    assert!(err.to_string().contains("16 bytes"));
+
+    let ok = run_batch(&tmp, &ExportOptions::default(), 2, false, false).unwrap();
+    assert!(!ok);
+    let report_text = std::fs::read_to_string(tmp.join("report.json")).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&report_text).unwrap();
+    assert_eq!(report["total"], 1);
+    assert_eq!(report["ok"], 0);
+    assert_eq!(report["failed"], 1);
+    assert_eq!(report["items"][0]["ok"], false);
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn descriptive_unique_allocation_never_overwrites_existing_stem_zip() {
+    let tmp = std::env::temp_dir().join(format!("cs2df_desc_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp).unwrap();
+
+    // Pre-existing <stem>.zip in output dir must remain untouched
+    let stem_zip = tmp.join("match-one.zip");
+    std::fs::write(&stem_zip, b"existing-stem-zip").unwrap();
+
+    let meta = MatchMeta {
+        map_name: "de_mirage".to_string(),
+        team_a_name: Some("Team A".to_string()),
+        team_a_score: 13,
+        team_b_name: Some("Team B".to_string()),
+        team_b_score: 11,
+        timings_seconds: BTreeMap::new(),
+        compress_level: 3,
+    };
+    let pref = build_descriptive_name(&meta, "match-one", "2026-06-12");
+    let out_p = allocate_unique_zip_path(&tmp, &pref, "match-one").unwrap();
+    assert_eq!(
+        out_p.file_name().unwrap(),
+        "2026-06-12_de_mirage_Team_A-vs-Team_B_13-11.zip"
+    );
+    assert_eq!(std::fs::read(&stem_zip).unwrap(), b"existing-stem-zip");
+
+    let _ = std::fs::remove_dir_all(&tmp);
+}
 
 #[test]
 fn batch_groups_split_gotv_parts_and_allocates_unique_names() {
@@ -694,17 +790,14 @@ fn aggregate_timings_totals_and_averages() {
 }
 
 #[test]
-fn delta_roundtrip_and_invalid_json_tokens() {
+fn delta_roundtrip_and_strict_json_rejects_nan() {
     let raw = vec![100, 108, 108, 95];
     let enc = delta_encode(&raw);
     assert_eq!(enc, vec![100, 8, 0, -13]);
     assert_eq!(decode_delta(&enc), raw);
 
-    let bad = r#"{"a": NaN, "b": "NaN", "c": -Infinity}"#;
-    let hits = find_invalid_json_tokens(bad);
-    assert_eq!(hits.len(), 2);
-    assert_eq!(hits[0].1, "NaN");
-    assert_eq!(hits[1].1, "-Infinity");
+    assert!(serde_json::from_str::<serde_json::Value>(r#"{"a": NaN}"#).is_err());
+    assert!(serde_json::from_str::<serde_json::Value>(r#"{"a": -Infinity}"#).is_err());
 }
 
 #[test]

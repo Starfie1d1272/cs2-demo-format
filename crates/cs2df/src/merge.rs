@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
+use crate::events::round_f64;
 use crate::parse::{parse_demo, ParseOptions, ProgressFn, RawDemo};
 
 const GAP_SECONDS: i64 = 8;
@@ -45,21 +46,9 @@ fn max_tick(raw: &RawDemo) -> i64 {
             best = t;
         }
     }
-    for r in &raw.fire_velocity {
-        if r.tick > best {
-            best = r.tick;
-        }
-    }
-    for r in &raw.replay_rows {
-        if r.tick > best {
-            best = r.tick;
-        }
-    }
-    for r in &raw.duel_rows {
-        if r.tick > best {
-            best = r.tick;
-        }
-    }
+    best = best
+        .max(raw.replay_cols.max_tick())
+        .max(raw.duel_cols.max_tick());
     best
 }
 
@@ -94,25 +83,7 @@ fn shift_part(raw: &mut RawDemo, off: i64) {
     for r in &mut raw.blinds {
         shift_tick(&mut r.tick, off);
     }
-    for r in &mut raw.bomb_planted {
-        shift_tick(&mut r.tick, off);
-    }
-    for r in &mut raw.bomb_defused {
-        shift_tick(&mut r.tick, off);
-    }
-    for r in &mut raw.bomb_exploded {
-        shift_tick(&mut r.tick, off);
-    }
-    for r in &mut raw.bomb_beginplant {
-        shift_tick(&mut r.tick, off);
-    }
-    for r in &mut raw.bomb_begindefuse {
-        shift_tick(&mut r.tick, off);
-    }
-    for r in &mut raw.bomb_dropped {
-        shift_tick(&mut r.tick, off);
-    }
-    for r in &mut raw.bomb_pickup {
+    for r in &mut raw.bomb_events {
         shift_tick(&mut r.tick, off);
     }
     for r in &mut raw.grenade_detonations {
@@ -137,15 +108,8 @@ fn shift_part(raw: &mut RawDemo, off: i64) {
     for r in &mut raw.economy_raw {
         shift_tick(&mut r.tick, off);
     }
-    for r in &mut raw.fire_velocity {
-        r.tick += off;
-    }
-    for r in &mut raw.replay_rows {
-        r.tick += off;
-    }
-    for r in &mut raw.duel_rows {
-        r.tick += off;
-    }
+    raw.replay_cols.shift_ticks(off);
+    raw.duel_cols.shift_ticks(off);
     for t in &mut raw.replay_ticks {
         *t += off;
     }
@@ -170,7 +134,7 @@ pub fn merge_raw(mut parts: Vec<RawDemo>) -> Result<RawDemo> {
     for part in &mut parts {
         shift_part(part, running);
         let tr = if part.tickrate > 0 { part.tickrate } else { 64 };
-        running += max_tick(part) + tr * GAP_SECONDS;
+        running = max_tick(part) + tr * GAP_SECONDS;
     }
 
     let mut prev_max = 0i64;
@@ -196,13 +160,7 @@ pub fn merge_raw(mut parts: Vec<RawDemo>) -> Result<RawDemo> {
                 part.hurts.retain(|r| keep(r.tick));
                 part.fires.retain(|r| keep(r.tick));
                 part.blinds.retain(|r| keep(r.tick));
-                part.bomb_planted.retain(|r| keep(r.tick));
-                part.bomb_defused.retain(|r| keep(r.tick));
-                part.bomb_exploded.retain(|r| keep(r.tick));
-                part.bomb_beginplant.retain(|r| keep(r.tick));
-                part.bomb_begindefuse.retain(|r| keep(r.tick));
-                part.bomb_dropped.retain(|r| keep(r.tick));
-                part.bomb_pickup.retain(|r| keep(r.tick));
+                part.bomb_events.retain(|r| keep(r.tick));
                 part.grenade_detonations.retain(|r| keep(r.tick));
                 part.inferno_expires.retain(|r| keep(r.tick));
                 part.smoke_expires.retain(|r| keep(r.tick));
@@ -226,28 +184,25 @@ pub fn merge_raw(mut parts: Vec<RawDemo>) -> Result<RawDemo> {
     let mut freeze_tick_set: BTreeSet<i64> = merged.freeze_ticks.iter().copied().collect();
 
     for p in iter {
+        for (k, v) in p.timings {
+            let entry = merged.timings.entry(k).or_insert(0.0);
+            *entry = round_f64(*entry + v, 3);
+        }
         merged.round_starts.extend(p.round_starts);
         merged.round_freeze_ends.extend(p.round_freeze_ends);
         merged.round_ends.extend(p.round_ends);
         merged.deaths.extend(p.deaths);
         merged.hurts.extend(p.hurts);
         merged.fires.extend(p.fires);
-        merged.fire_velocity.extend(p.fire_velocity);
         merged.blinds.extend(p.blinds);
-        merged.bomb_planted.extend(p.bomb_planted);
-        merged.bomb_defused.extend(p.bomb_defused);
-        merged.bomb_exploded.extend(p.bomb_exploded);
-        merged.bomb_beginplant.extend(p.bomb_beginplant);
-        merged.bomb_begindefuse.extend(p.bomb_begindefuse);
-        merged.bomb_dropped.extend(p.bomb_dropped);
-        merged.bomb_pickup.extend(p.bomb_pickup);
+        merged.bomb_events.extend(p.bomb_events);
         merged.grenade_detonations.extend(p.grenade_detonations);
         merged.inferno_expires.extend(p.inferno_expires);
         merged.smoke_expires.extend(p.smoke_expires);
         merged.grenade_throws.extend(p.grenade_throws);
         merged.grenade_trajectories.extend(p.grenade_trajectories);
-        merged.replay_rows.extend(p.replay_rows);
-        merged.duel_rows.extend(p.duel_rows);
+        merged.replay_cols.extend_from(p.replay_cols);
+        merged.duel_cols.extend_from(p.duel_cols);
         merged.duel_windows.extend(p.duel_windows);
         merged.round_side_samples.extend(p.round_side_samples);
         merged.economy_raw.extend(p.economy_raw);

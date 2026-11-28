@@ -7,7 +7,7 @@ members = [
 ]
 
 
-[profile.dev]
+[profile.dev.package.parser]
 overflow-checks = false
 
 [profile.release]

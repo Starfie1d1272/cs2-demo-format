@@ -3,10 +3,10 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 
 use crate::enums::{
-    bomb_site_from_place, bomb_type_map, classify_inventory, is_valid_grenade_type,
-    normalize_hitgroup, normalize_weapon_name,
+    bomb_site_from_place, classify_inventory, normalize_hitgroup, normalize_weapon_name,
+    BombEventKind, EconomyType, GrenadeType, TeamKey,
 };
-use crate::rounds::{format_sid, PlayerInfoRow, RoundModel, RoundRow};
+use crate::rounds::{valid_sid64, PlayerInfoRow, RoundModel, RoundRow};
 
 #[inline]
 pub fn round_ties_even_i64(v: f64) -> i64 {
@@ -64,14 +64,16 @@ pub struct PlayerRow {
     #[serde(rename = "steamId64")]
     pub steam_id64: String,
     pub name: String,
-    pub team_key: String,
+    pub team_key: TeamKey,
+    #[serde(skip)]
+    pub steam_id_num: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct PlayerDirectory {
     pub rows: Vec<PlayerRow>,
-    pub index_by_sid: HashMap<String, usize>,
-    pub team_by_sid: HashMap<String, String>,
+    pub index_by_sid: HashMap<u64, usize>,
+    pub team_by_sid: HashMap<u64, TeamKey>,
 }
 
 impl PlayerDirectory {
@@ -79,8 +81,9 @@ impl PlayerDirectory {
         let mut index_by_sid = HashMap::with_capacity(rows.len());
         let mut team_by_sid = HashMap::with_capacity(rows.len());
         for (i, r) in rows.iter().enumerate() {
-            index_by_sid.insert(r.steam_id64.clone(), i);
-            team_by_sid.insert(r.steam_id64.clone(), r.team_key.clone());
+            let sid = r.steam_id_num;
+            index_by_sid.insert(sid, i);
+            team_by_sid.insert(sid, r.team_key);
         }
         Self {
             rows,
@@ -89,16 +92,21 @@ impl PlayerDirectory {
         }
     }
 
-    pub fn idx(&self, sid: Option<&str>) -> Option<usize> {
-        self.index_by_sid.get(sid?).copied()
+    #[inline]
+    pub fn idx(&self, sid: Option<u64>) -> Option<usize> {
+        let s = valid_sid64(sid)?;
+        self.index_by_sid.get(&s).copied()
     }
 
-    pub fn team(&self, sid: Option<&str>) -> Option<&str> {
-        self.team_by_sid.get(sid?).map(String::as_str)
+    #[inline]
+    pub fn team(&self, sid: Option<u64>) -> Option<TeamKey> {
+        let s = valid_sid64(sid)?;
+        self.team_by_sid.get(&s).copied()
     }
 
-    pub fn team_of_index(&self, idx: usize) -> &str {
-        &self.rows[idx].team_key
+    #[inline]
+    pub fn team_of_index(&self, idx: usize) -> TeamKey {
+        self.rows[idx].team_key
     }
 }
 
@@ -106,33 +114,35 @@ pub fn build_players(player_info: &[PlayerInfoRow]) -> PlayerDirectory {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for r in player_info {
-        let Some(sid) = format_sid(r.steamid) else {
+        let Some(sid) = valid_sid64(r.steamid) else {
             continue;
         };
-        if !seen.insert(sid.clone()) {
+        if !seen.insert(sid) {
             continue;
         }
         let team_key = match r.team_num {
-            Some(2) => "teamA",
-            Some(3) => "teamB",
+            Some(2) => TeamKey::TeamA,
+            Some(3) => TeamKey::TeamB,
             _ => continue,
         };
+        let sid_str = sid.to_string();
         let name = r
             .name
             .as_deref()
             .filter(|n| !n.is_empty())
-            .unwrap_or(&sid)
+            .unwrap_or(&sid_str)
             .to_string();
         out.push(PlayerRow {
-            steam_id64: sid,
+            steam_id64: sid_str,
             name,
-            team_key: team_key.to_string(),
+            team_key,
+            steam_id_num: sid,
         });
     }
     out.sort_by(|a, b| {
         a.team_key
             .cmp(&b.team_key)
-            .then_with(|| a.steam_id64.cmp(&b.steam_id64))
+            .then_with(|| a.steam_id_num.cmp(&b.steam_id_num))
     });
     PlayerDirectory::new(out)
 }
@@ -140,7 +150,7 @@ pub fn build_players(player_info: &[PlayerInfoRow]) -> PlayerDirectory {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamMatchInfo {
-    pub team_key: String,
+    pub team_key: TeamKey,
     pub name: Option<String>,
     pub score: i64,
 }
@@ -152,7 +162,7 @@ pub struct MatchRow {
     pub tickrate: i64,
     pub duration_seconds: f64,
     pub server_name: Option<String>,
-    pub source: String,
+    pub source: &'static str,
     pub team_a: TeamMatchInfo,
     pub team_b: TeamMatchInfo,
 }
@@ -166,11 +176,11 @@ pub fn build_match(
 ) -> MatchRow {
     let team_a_score = rounds
         .iter()
-        .filter(|r| r.winner_team_key == "teamA")
+        .filter(|r| r.winner_team_key == TeamKey::TeamA)
         .count() as i64;
     let team_b_score = rounds
         .iter()
-        .filter(|r| r.winner_team_key == "teamB")
+        .filter(|r| r.winner_team_key == TeamKey::TeamB)
         .count() as i64;
 
     let team_a_name = team_a_name_opt
@@ -215,22 +225,18 @@ pub fn build_match(
         tickrate,
         duration_seconds: duration,
         server_name,
-        source: "demo".to_string(),
+        source: "demo",
         team_a: TeamMatchInfo {
-            team_key: "teamA".to_string(),
+            team_key: TeamKey::TeamA,
             name: team_a_name,
             score: team_a_score,
         },
         team_b: TeamMatchInfo {
-            team_key: "teamB".to_string(),
+            team_key: TeamKey::TeamB,
             name: team_b_name,
             score: team_b_score,
         },
     }
-}
-
-fn is_valid_side(s: &str) -> bool {
-    matches!(s, "t" | "ct")
 }
 
 fn active_event_round_number(
@@ -307,21 +313,11 @@ pub fn build_kills(
         let Some(n) = active_event_round_number(round_model, r.tick, r.total_rounds_played) else {
             continue;
         };
-        let Some(victim_sid) = format_sid(r.user_steamid) else {
+        let Some(victim_idx) = players.idx(r.user_steamid) else {
             continue;
         };
-        let Some(victim_idx) = players.idx(Some(&victim_sid)) else {
-            continue;
-        };
-        let Some(victim_team) = players.team(Some(&victim_sid)) else {
-            continue;
-        };
-        let side = round_model
-            .side_map
-            .get(&(n, victim_team.to_string()))
-            .map(String::as_str)
-            .unwrap_or("unknown");
-        if !is_valid_side(side) {
+        let victim_team = players.team_of_index(victim_idx);
+        if !round_model.side_map.contains_key(&(n, victim_team)) {
             continue;
         }
         let weapon = r.weapon.as_deref().unwrap_or("").to_string();
@@ -329,10 +325,8 @@ pub fn build_kills(
             continue;
         }
 
-        let killer_sid = format_sid(r.attacker_steamid);
-        let killer_idx = players.idx(killer_sid.as_deref());
-        let assist_sid = format_sid(r.assister_steamid);
-        let assist_idx = players.idx(assist_sid.as_deref());
+        let killer_idx = players.idx(r.attacker_steamid);
+        let assist_idx = players.idx(r.assister_steamid);
         let flash_assister_idx = if r.assistedflash { assist_idx } else { None };
 
         out.push(KillRow {
@@ -430,7 +424,7 @@ pub struct DamageRow {
     pub attacker_index: Option<usize>,
     pub victim_index: usize,
     pub weapon: String,
-    pub hitgroup: String,
+    pub hitgroup: &'static str,
     pub health_damage: i64,
     pub health_damage_raw: i64,
     pub armor_damage: i64,
@@ -455,21 +449,11 @@ pub fn build_damages(
         let Some(n) = active_event_round_number(round_model, r.tick, r.total_rounds_played) else {
             continue;
         };
-        let Some(vic_sid) = format_sid(r.user_steamid) else {
+        let Some(vic_idx) = players.idx(r.user_steamid) else {
             continue;
         };
-        let Some(vic_idx) = players.idx(Some(&vic_sid)) else {
-            continue;
-        };
-        let Some(vic_team) = players.team(Some(&vic_sid)) else {
-            continue;
-        };
-        let side = round_model
-            .side_map
-            .get(&(n, vic_team.to_string()))
-            .map(String::as_str)
-            .unwrap_or("unknown");
-        if !is_valid_side(side) {
+        let vic_team = players.team_of_index(vic_idx);
+        if !round_model.side_map.contains_key(&(n, vic_team)) {
             continue;
         }
         let weapon = r.weapon.as_deref().unwrap_or("").to_string();
@@ -477,8 +461,7 @@ pub fn build_damages(
             continue;
         }
 
-        let atk_sid = format_sid(r.attacker_steamid);
-        let atk_idx = players.idx(atk_sid.as_deref());
+        let atk_idx = players.idx(r.attacker_steamid);
 
         let raw_dmg = r.dmg_health;
         let health_before = *remaining_health.entry((n, vic_idx)).or_insert(100);
@@ -492,7 +475,7 @@ pub fn build_damages(
             attacker_index: atk_idx,
             victim_index: vic_idx,
             weapon,
-            hitgroup: normalize_hitgroup(r.hitgroup.as_deref()).to_string(),
+            hitgroup: normalize_hitgroup(r.hitgroup.as_deref()),
             health_damage: health_dmg,
             health_damage_raw: raw_dmg,
             armor_damage: r.dmg_armor,
@@ -536,37 +519,17 @@ pub fn build_blinds(
         let Some(n) = active_event_round_number(round_model, r.tick, r.total_rounds_played) else {
             continue;
         };
-        let Some(flasher_sid) = format_sid(r.attacker_steamid) else {
+        let Some(flasher_idx) = players.idx(r.attacker_steamid) else {
             continue;
         };
-        let Some(flashed_sid) = format_sid(r.user_steamid) else {
+        let Some(flashed_idx) = players.idx(r.user_steamid) else {
             continue;
         };
-        let Some(flasher_idx) = players.idx(Some(&flasher_sid)) else {
-            continue;
-        };
-        let Some(flashed_idx) = players.idx(Some(&flashed_sid)) else {
-            continue;
-        };
-        let Some(flasher_team) = players.team(Some(&flasher_sid)) else {
-            continue;
-        };
-        let Some(flashed_team) = players.team(Some(&flashed_sid)) else {
-            continue;
-        };
-        if !is_valid_side(
-            round_model
-                .side_map
-                .get(&(n, flasher_team.to_string()))
-                .map(String::as_str)
-                .unwrap_or("unknown"),
-        ) || !is_valid_side(
-            round_model
-                .side_map
-                .get(&(n, flashed_team.to_string()))
-                .map(String::as_str)
-                .unwrap_or("unknown"),
-        ) {
+        let flasher_team = players.team_of_index(flasher_idx);
+        let flashed_team = players.team_of_index(flashed_idx);
+        if !round_model.side_map.contains_key(&(n, flasher_team))
+            || !round_model.side_map.contains_key(&(n, flashed_team))
+        {
             continue;
         }
         let dur = if r.blind_duration.is_finite() {
@@ -587,7 +550,8 @@ pub fn build_blinds(
 }
 
 #[derive(Debug, Clone)]
-pub struct BombRawRow {
+pub struct BombRawEvent {
+    pub kind: BombEventKind,
     pub tick: i64,
     pub total_rounds_played: i64,
     pub user_steamid: Option<u64>,
@@ -603,78 +567,61 @@ pub struct BombRow {
     pub round_number: i64,
     pub tick: i64,
     #[serde(rename = "type")]
-    pub event_type: String,
-    pub site: Option<String>,
+    pub event_type: BombEventKind,
+    pub site: Option<&'static str>,
     pub actor_index: Option<usize>,
     pub position: Pos3,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn build_bombs(
-    bomb_planted: &[BombRawRow],
-    bomb_defused: &[BombRawRow],
-    bomb_exploded: &[BombRawRow],
-    bomb_beginplant: &[BombRawRow],
-    bomb_begindefuse: &[BombRawRow],
-    bomb_dropped: &[BombRawRow],
-    bomb_pickup: &[BombRawRow],
+    bomb_events: &[BombRawEvent],
     players: &PlayerDirectory,
     round_model: &RoundModel,
 ) -> Vec<BombRow> {
-    let mut round_site: HashMap<i64, String> = HashMap::new();
-    for r in bomb_planted {
-        let n = round_model.round_for_event(r.tick, r.total_rounds_played);
-        let site = bomb_site_from_place(r.user_last_place_name.as_deref());
-        if let (Some(rn), Some(st)) = (n, site) {
-            round_site.insert(rn, st.to_string());
+    let mut round_site: HashMap<i64, &'static str> = HashMap::new();
+    for r in bomb_events {
+        if r.kind == BombEventKind::Planted {
+            let n = round_model.round_for_event(r.tick, r.total_rounds_played);
+            let site = bomb_site_from_place(r.user_last_place_name.as_deref());
+            if let (Some(rn), Some(st)) = (n, site) {
+                round_site.insert(rn, st);
+            }
         }
     }
 
-    let sources: [(&[BombRawRow], &str); 7] = [
-        (bomb_planted, "planted"),
-        (bomb_defused, "defused"),
-        (bomb_exploded, "exploded"),
-        (bomb_beginplant, "plant"),
-        (bomb_begindefuse, "defuse"),
-        (bomb_dropped, "dropped"),
-        (bomb_pickup, "picked_up"),
-    ];
-
-    let mut out = Vec::new();
-    for (rows, ev_type) in sources {
-        let Some(v3_type) = bomb_type_map(ev_type) else {
+    let mut out = Vec::with_capacity(bomb_events.len());
+    for r in bomb_events {
+        let Some(n) = round_model.round_for_event(r.tick, r.total_rounds_played) else {
             continue;
         };
-        let is_round_site_type =
-            matches!(v3_type, "planted" | "defused" | "exploded" | "defuse_begin");
-        for r in rows {
-            let Some(n) = round_model.round_for_event(r.tick, r.total_rounds_played) else {
-                continue;
-            };
-            let Some(window) = round_model.window_for_round(n) else {
-                continue;
-            };
-            let Some(event_end) = round_model.event_end_tick(n) else {
-                continue;
-            };
-            if r.tick < window.freeze_end_tick || r.tick > event_end {
-                continue;
-            }
-            let actor_sid = format_sid(r.user_steamid);
-            let mut site =
-                bomb_site_from_place(r.user_last_place_name.as_deref()).map(str::to_string);
-            if site.is_none() && is_round_site_type {
-                site = round_site.get(&n).cloned();
-            }
-            out.push(BombRow {
-                round_number: n,
-                tick: r.tick,
-                event_type: v3_type.to_string(),
-                site,
-                actor_index: players.idx(actor_sid.as_deref()),
-                position: Pos3::from_opts(r.user_x, r.user_y, r.user_z),
-            });
+        let Some(window) = round_model.window_for_round(n) else {
+            continue;
+        };
+        let Some(event_end) = round_model.event_end_tick(n) else {
+            continue;
+        };
+        if r.tick < window.freeze_end_tick || r.tick > event_end {
+            continue;
         }
+        let is_round_site_type = matches!(
+            r.kind,
+            BombEventKind::Planted
+                | BombEventKind::Defused
+                | BombEventKind::Exploded
+                | BombEventKind::DefuseBegin
+        );
+        let mut site = bomb_site_from_place(r.user_last_place_name.as_deref());
+        if site.is_none() && is_round_site_type {
+            site = round_site.get(&n).copied();
+        }
+        out.push(BombRow {
+            round_number: n,
+            tick: r.tick,
+            event_type: r.kind,
+            site,
+            actor_index: players.idx(r.user_steamid),
+            position: Pos3::from_opts(r.user_x, r.user_y, r.user_z),
+        });
     }
     out.sort_by_key(|b| (b.round_number, b.tick));
     out
@@ -683,7 +630,7 @@ pub fn build_bombs(
 #[derive(Debug, Clone)]
 pub struct GrenadeThrowRaw {
     pub grenade_entity_id: Option<i64>,
-    pub grenade: String,
+    pub grenade: GrenadeType,
     pub tick: i64,
     pub destroy_tick: i64,
     pub steamid: Option<u64>,
@@ -696,7 +643,7 @@ pub struct GrenadeThrowRaw {
 pub struct GrenadeDetonationRaw {
     pub tick: i64,
     pub total_rounds_played: i64,
-    pub grenade_type: String,
+    pub grenade_type: GrenadeType,
     pub user_steamid: Option<u64>,
     pub entity_id: Option<i64>,
     pub x: Option<f64>,
@@ -724,7 +671,7 @@ pub struct GrenadeRow {
     pub destroy_tick: Option<i64>,
     #[serde(skip)]
     pub entity_id: Option<i64>,
-    pub grenade: String,
+    pub grenade: GrenadeType,
     pub thrower_index: usize,
     pub throw_position: Pos3,
     pub effect_position: Pos3,
@@ -742,8 +689,8 @@ pub fn build_grenades(
         rn: i64,
         tick: i64,
         destroy_tick: Option<i64>,
-        gtype: String,
-        sid: Option<String>,
+        gtype: GrenadeType,
+        sid: Option<u64>,
         eid: Option<String>,
         pos: Pos3,
     }
@@ -753,9 +700,6 @@ pub fn build_grenades(
         let Some(n) = round_model.round_for_tick(r.tick) else {
             continue;
         };
-        if !is_valid_grenade_type(&r.grenade) {
-            continue;
-        }
         let eid = r.grenade_entity_id.map(|id| format!("{id}-{}", r.tick));
         throws.push(ThrowItem {
             rn: n,
@@ -765,8 +709,8 @@ pub fn build_grenades(
             } else {
                 None
             },
-            gtype: r.grenade.clone(),
-            sid: format_sid(r.steamid),
+            gtype: r.grenade,
+            sid: valid_sid64(r.steamid),
             eid,
             pos: Pos3::from_opts(Some(r.x), Some(r.y), Some(r.z)),
         });
@@ -787,11 +731,8 @@ pub fn build_grenades(
         if r.tick < window.freeze_end_tick || r.tick > event_end {
             continue;
         }
-        if !is_valid_grenade_type(&r.grenade_type) {
-            continue;
-        }
 
-        let mut thrower_sid = format_sid(r.user_steamid);
+        let mut thrower_sid = valid_sid64(r.user_steamid);
         let matched = throws
             .iter()
             .filter(|t| {
@@ -805,12 +746,12 @@ pub fn build_grenades(
         let detonate_entity_id = r.entity_id;
         let (throw_pos, throw_tick, mut destroy_tick, grenade_id) = if let Some(m) = matched {
             if thrower_sid.is_none() {
-                thrower_sid = m.sid.clone();
+                thrower_sid = m.sid;
             }
             (
                 m.pos.clone(),
                 m.tick,
-                if r.grenade_type == "smoke" {
+                if r.grenade_type == GrenadeType::Smoke {
                     None
                 } else {
                     m.destroy_tick
@@ -829,18 +770,11 @@ pub fn build_grenades(
         if throw_tick <= 0 || r.tick <= 0 {
             continue;
         }
-        let Some(thrower_idx) = players.idx(thrower_sid.as_deref()) else {
+        let Some(thrower_idx) = players.idx(thrower_sid) else {
             continue;
         };
-        let Some(thrower_team) = players.team(thrower_sid.as_deref()) else {
-            continue;
-        };
-        let side = round_model
-            .side_map
-            .get(&(n, thrower_team.to_string()))
-            .map(String::as_str)
-            .unwrap_or("unknown");
-        if !is_valid_side(side) {
+        let thrower_team = players.team_of_index(thrower_idx);
+        if !round_model.side_map.contains_key(&(n, thrower_team)) {
             continue;
         }
         if let Some(dt) = destroy_tick {
@@ -856,7 +790,7 @@ pub fn build_grenades(
             effect_tick: r.tick,
             destroy_tick,
             entity_id: detonate_entity_id,
-            grenade: r.grenade_type.clone(),
+            grenade: r.grenade_type,
             thrower_index: thrower_idx,
             throw_position: throw_pos,
             effect_position: Pos3::from_opts(r.x, r.y, r.z),
@@ -888,7 +822,7 @@ pub fn build_grenades(
     expires.sort_by_key(|e| e.tick);
 
     for g in out.iter_mut() {
-        if g.grenade != "molotov" || g.destroy_tick.is_some() {
+        if g.grenade != GrenadeType::Molotov || g.destroy_tick.is_some() {
             continue;
         }
         let event_end = round_model.event_end_tick(g.round_number);
@@ -937,7 +871,7 @@ pub fn build_grenades(
         let Some(eid) = g.entity_id.take() else {
             continue;
         };
-        if g.grenade != "smoke" {
+        if g.grenade != GrenadeType::Smoke {
             continue;
         }
         let event_end = round_model.event_end_tick(g.round_number);
@@ -984,10 +918,13 @@ pub fn build_clutches(
     let mut team_a_players = HashSet::new();
     let mut team_b_players = HashSet::new();
     for (i, p) in players.rows.iter().enumerate() {
-        if p.team_key == "teamA" {
-            team_a_players.insert(i);
-        } else {
-            team_b_players.insert(i);
+        match p.team_key {
+            TeamKey::TeamA => {
+                team_a_players.insert(i);
+            }
+            TeamKey::TeamB => {
+                team_b_players.insert(i);
+            }
         }
     }
 
@@ -1004,9 +941,10 @@ pub fn build_clutches(
             let a_alive: Vec<usize> = team_a_players.difference(&dead).copied().collect();
             let b_alive: Vec<usize> = team_b_players.difference(&dead).copied().collect();
 
-            for (team_key, own_alive, opp_alive) in
-                [("teamA", &a_alive, &b_alive), ("teamB", &b_alive, &a_alive)]
-            {
+            for (team_key, own_alive, opp_alive) in [
+                (TeamKey::TeamA, &a_alive, &b_alive),
+                (TeamKey::TeamB, &b_alive, &a_alive),
+            ] {
                 if own_alive.len() != 1 || opp_alive.is_empty() {
                     continue;
                 }
@@ -1055,23 +993,29 @@ pub struct EconomyRow {
     pub money_spent: i64,
     pub equipment_value: i64,
     #[serde(rename = "type")]
-    pub eco_type: String,
+    pub eco_type: EconomyType,
     pub has_armor: bool,
     pub has_helmet: bool,
     pub has_defuse_kit: bool,
     pub primary_weapon: Option<String>,
     pub secondary_weapon: Option<String>,
     pub grenade_count: usize,
-    pub grenades: Vec<String>,
+    pub grenades: Vec<GrenadeType>,
 }
 
-const ECO_ORDER: [&str; 5] = ["pistol", "eco", "semi", "force", "full"];
+const ECO_ORDER: [EconomyType; 5] = [
+    EconomyType::Pistol,
+    EconomyType::Eco,
+    EconomyType::Semi,
+    EconomyType::Force,
+    EconomyType::Full,
+];
 
 fn is_pistol_round(round_number: i64) -> bool {
     matches!(round_number, 1 | 13)
 }
 
-fn is_pistol_conversion_round(round_number: i64, team_key: &str, rounds: &[RoundRow]) -> bool {
+fn is_pistol_conversion_round(round_number: i64, team_key: TeamKey, rounds: &[RoundRow]) -> bool {
     let prev = round_number - 1;
     if !matches!(prev, 1 | 13) {
         return false;
@@ -1087,29 +1031,29 @@ fn economy_type(
     start_money: i64,
     equipment_value: i64,
     round_number: i64,
-) -> &'static str {
+) -> EconomyType {
     if is_pistol_round(round_number) {
-        return "pistol";
+        return EconomyType::Pistol;
     }
     if equipment_value >= 4000 {
-        return "full";
+        return EconomyType::Full;
     }
     if money_spent < 1000 && equipment_value < 1000 {
-        return "eco";
+        return EconomyType::Eco;
     }
     if start_money > 0 && (money_spent as f64) / (start_money as f64) >= 0.80 {
-        return "force";
+        return EconomyType::Force;
     }
-    "semi"
+    EconomyType::Semi
 }
 
-fn team_economy_vote(types: &[&str]) -> &'static str {
+fn team_economy_vote(types: &[EconomyType]) -> EconomyType {
     if types.is_empty() {
-        return "semi";
+        return EconomyType::Semi;
     }
     let mut counts = [0usize; 5];
     for t in types {
-        if let Some(pos) = ECO_ORDER.iter().position(|&e| e == *t) {
+        if let Some(pos) = ECO_ORDER.iter().position(|e| e == t) {
             counts[pos] += 1;
         }
     }
@@ -1119,7 +1063,7 @@ fn team_economy_vote(types: &[&str]) -> &'static str {
             return ECO_ORDER[i];
         }
     }
-    "semi"
+    EconomyType::Semi
 }
 
 pub fn build_economies(
@@ -1134,28 +1078,18 @@ pub fn build_economies(
     }
 
     let mut out = Vec::new();
-    let mut team_round_types: HashMap<(i64, String), Vec<&'static str>> = HashMap::new();
+    let mut team_round_types: HashMap<(i64, TeamKey), Vec<EconomyType>> = HashMap::new();
 
     for r in economy_raw {
         let n = freeze_tick_to_round.get(&r.tick).copied().unwrap_or(0);
         if n <= 0 {
             continue;
         }
-        let Some(sid) = format_sid(r.steamid) else {
+        let Some(idx) = players.idx(r.steamid) else {
             continue;
         };
-        let Some(idx) = players.idx(Some(&sid)) else {
-            continue;
-        };
-        let Some(key) = players.team(Some(&sid)) else {
-            continue;
-        };
-        let side = round_model
-            .side_map
-            .get(&(n, key.to_string()))
-            .map(String::as_str)
-            .unwrap_or("unknown");
-        if !is_valid_side(side) {
+        let key = players.team_of_index(idx);
+        if !round_model.side_map.contains_key(&(n, key)) {
             continue;
         }
 
@@ -1173,7 +1107,7 @@ pub fn build_economies(
             start_money: r.start_balance,
             money_spent: r.cash_spent_this_round,
             equipment_value: r.current_equip_value,
-            eco_type: eco_type.to_string(),
+            eco_type,
             has_armor: r.armor > 0,
             has_helmet: r.has_helmet,
             has_defuse_kit: r.has_defuser,
@@ -1182,34 +1116,24 @@ pub fn build_economies(
             grenade_count,
             grenades,
         });
-        team_round_types
-            .entry((n, key.to_string()))
-            .or_default()
-            .push(eco_type);
+        team_round_types.entry((n, key)).or_default().push(eco_type);
     }
 
-    // Compute votes before mutating rounds
-    let mut votes: HashMap<(i64, String), &'static str> = HashMap::new();
+    let mut votes: HashMap<(i64, TeamKey), EconomyType> = HashMap::new();
     for ((rn, key), types) in &team_round_types {
         let mut vote = team_economy_vote(types);
-        if is_pistol_conversion_round(*rn, key, rounds) {
-            vote = "full";
+        if is_pistol_conversion_round(*rn, *key, rounds) {
+            vote = EconomyType::Full;
         }
-        votes.insert((*rn, key.clone()), vote);
+        votes.insert((*rn, *key), vote);
     }
 
     for rd in rounds.iter_mut() {
-        if let Some(&v) = votes.get(&(rd.round_number, "teamA".to_string())) {
-            rd.team_a_economy = v.to_string();
+        if let Some(&v) = votes.get(&(rd.round_number, TeamKey::TeamA)) {
+            rd.team_a_economy = v;
         }
-        if let Some(&v) = votes.get(&(rd.round_number, "teamB".to_string())) {
-            rd.team_b_economy = v.to_string();
-        }
-        if rd.team_a_economy == "unknown" || rd.team_a_economy.is_empty() {
-            rd.team_a_economy = "semi".to_string();
-        }
-        if rd.team_b_economy == "unknown" || rd.team_b_economy.is_empty() {
-            rd.team_b_economy = "semi".to_string();
+        if let Some(&v) = votes.get(&(rd.round_number, TeamKey::TeamB)) {
+            rd.team_b_economy = v;
         }
     }
 
@@ -1338,8 +1262,7 @@ impl StatsAccum {
 
 #[allow(clippy::too_many_arguments)]
 pub fn build_player_stats(
-    bomb_planted: &[BombRawRow],
-    bomb_defused: &[BombRawRow],
+    bomb_events: &[BombRawEvent],
     players: &PlayerDirectory,
     round_model: &RoundModel,
     rounds: &[RoundRow],
@@ -1402,7 +1325,6 @@ pub fn build_player_stats(
         }
     }
 
-    // collateral kills
     let mut collateral_groups: HashMap<(usize, i64), usize> = HashMap::new();
     for k in kills {
         let Some(ki) = k.killer_index else {
@@ -1419,29 +1341,24 @@ pub fn build_player_stats(
         }
     }
 
-    // bomb plant / defuse
-    for r in bomb_planted {
-        if round_model
-            .round_for_event(r.tick, r.total_rounds_played)
-            .is_some_and(|n| round_model.has_round(n))
-        {
-            if let Some(idx) = players.idx(format_sid(r.user_steamid).as_deref()) {
-                stats[idx].row.bomb_plant_count += 1;
-            }
+    for r in bomb_events {
+        if !matches!(r.kind, BombEventKind::Planted | BombEventKind::Defused) {
+            continue;
         }
-    }
-    for r in bomb_defused {
         if round_model
             .round_for_event(r.tick, r.total_rounds_played)
             .is_some_and(|n| round_model.has_round(n))
         {
-            if let Some(idx) = players.idx(format_sid(r.user_steamid).as_deref()) {
-                stats[idx].row.bomb_defuse_count += 1;
+            if let Some(idx) = players.idx(r.user_steamid) {
+                match r.kind {
+                    BombEventKind::Planted => stats[idx].row.bomb_plant_count += 1,
+                    BombEventKind::Defused => stats[idx].row.bomb_defuse_count += 1,
+                    _ => {}
+                }
             }
         }
     }
 
-    // first kill / first death per round
     let mut sorted_kills: Vec<&KillRow> = kills.iter().collect();
     sorted_kills.sort_by_key(|k| k.tick);
     let mut first_kills: HashMap<i64, usize> = HashMap::new();
@@ -1459,7 +1376,6 @@ pub fn build_player_stats(
         stats[idx].row.first_death_count += 1;
     }
 
-    // multi-kill buckets
     for ((ki, _), count) in kills_per_round {
         let s = &mut stats[ki].row;
         match count {
@@ -1472,7 +1388,6 @@ pub fn build_player_stats(
         }
     }
 
-    // damages
     for d in damages {
         let Some(atk) = d.attacker_index else {
             continue;
@@ -1494,7 +1409,6 @@ pub fn build_player_stats(
         }
     }
 
-    // blinds
     for b in blinds {
         if players.team_of_index(b.flasher_index) != players.team_of_index(b.flashed_index) {
             stats[b.flasher_index].row.enemy_flash_duration_seconds += b.duration_seconds;
@@ -1503,7 +1417,6 @@ pub fn build_player_stats(
         }
     }
 
-    // KAST
     let all_rounds: HashSet<i64> = rounds.iter().map(|r| r.round_number).collect();
     for s in &mut stats {
         let mut kast = HashSet::new();
@@ -1519,7 +1432,6 @@ pub fn build_player_stats(
         s.row.kast_rounds = kast.len();
     }
 
-    // clutches
     for c in clutches {
         let s = &mut stats[c.clutcher_index].row;
         match c.opponent_count.min(5) {

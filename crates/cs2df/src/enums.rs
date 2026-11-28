@@ -1,3 +1,122 @@
+use serde::Serialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+pub enum TeamKey {
+    #[serde(rename = "teamA")]
+    TeamA,
+    #[serde(rename = "teamB")]
+    TeamB,
+}
+
+impl TeamKey {
+    #[inline]
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::TeamA => Self::TeamB,
+            Self::TeamB => Self::TeamA,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+pub enum Side {
+    #[serde(rename = "t")]
+    T,
+    #[serde(rename = "ct")]
+    Ct,
+}
+
+impl Side {
+    #[inline]
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::T => Self::Ct,
+            Self::Ct => Self::T,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GrenadeType {
+    Flashbang,
+    Smoke,
+    Molotov,
+    Incendiary,
+    Hegrenade,
+    Decoy,
+}
+
+impl GrenadeType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Flashbang => "flashbang",
+            Self::Smoke => "smoke",
+            Self::Molotov => "molotov",
+            Self::Incendiary => "incendiary",
+            Self::Hegrenade => "hegrenade",
+            Self::Decoy => "decoy",
+        }
+    }
+
+    pub fn from_weapon(weapon: &str) -> Option<Self> {
+        match weapon.trim().to_ascii_lowercase().as_str() {
+            "smokegrenade" => Some(Self::Smoke),
+            "flashbang" => Some(Self::Flashbang),
+            "hegrenade" => Some(Self::Hegrenade),
+            "molotov" => Some(Self::Molotov),
+            "incgrenade" => Some(Self::Incendiary),
+            "decoy" => Some(Self::Decoy),
+            _ => None,
+        }
+    }
+
+    pub fn from_projectile_class(class_name: &str) -> Option<Self> {
+        match class_name.trim() {
+            "CSmokeGrenadeProjectile" => Some(Self::Smoke),
+            "CFlashbangProjectile" => Some(Self::Flashbang),
+            "CHEGrenadeProjectile" => Some(Self::Hegrenade),
+            "CMolotovProjectile" => Some(Self::Molotov),
+            "CDecoyProjectile" => Some(Self::Decoy),
+            _ => None,
+        }
+    }
+
+    pub fn from_inventory_item(name: &str) -> Option<Self> {
+        match name {
+            "Smoke Grenade" => Some(Self::Smoke),
+            "Flashbang" => Some(Self::Flashbang),
+            "High Explosive Grenade" => Some(Self::Hegrenade),
+            "Incendiary Grenade" => Some(Self::Incendiary),
+            "Molotov" => Some(Self::Molotov),
+            "Decoy Grenade" => Some(Self::Decoy),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EconomyType {
+    Pistol,
+    Eco,
+    Semi,
+    Force,
+    Full,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BombEventKind {
+    PlantBegin,
+    Planted,
+    DefuseBegin,
+    Defused,
+    Exploded,
+    Dropped,
+    PickedUp,
+}
+
 pub fn normalize_hitgroup(raw: Option<&str>) -> &'static str {
     let s = raw.unwrap_or("").trim().to_ascii_lowercase();
     match s.as_str() {
@@ -54,48 +173,6 @@ pub fn normalize_round_end_reason(raw_str: Option<&str>, raw_num: Option<i64>) -
     }
 }
 
-pub fn is_valid_grenade_type(s: &str) -> bool {
-    matches!(
-        s,
-        "flashbang" | "smoke" | "molotov" | "incendiary" | "hegrenade" | "decoy"
-    )
-}
-
-pub fn weapon_to_grenade_type(weapon: &str) -> Option<&'static str> {
-    match weapon.trim().to_ascii_lowercase().as_str() {
-        "smokegrenade" => Some("smoke"),
-        "flashbang" => Some("flashbang"),
-        "hegrenade" => Some("hegrenade"),
-        "molotov" => Some("molotov"),
-        "incgrenade" => Some("incendiary"),
-        "decoy" => Some("decoy"),
-        _ => None,
-    }
-}
-
-pub fn grenade_projectile_to_type(class_name: &str) -> Option<&'static str> {
-    match class_name.trim() {
-        "CSmokeGrenadeProjectile" => Some("smoke"),
-        "CFlashbangProjectile" => Some("flashbang"),
-        "CHEGrenadeProjectile" => Some("hegrenade"),
-        "CMolotovProjectile" => Some("molotov"),
-        "CDecoyProjectile" => Some("decoy"),
-        _ => None,
-    }
-}
-
-fn grenade_item_to_type(name: &str) -> Option<&'static str> {
-    match name {
-        "Smoke Grenade" => Some("smoke"),
-        "Flashbang" => Some("flashbang"),
-        "High Explosive Grenade" => Some("hegrenade"),
-        "Incendiary Grenade" => Some("incendiary"),
-        "Molotov" => Some("molotov"),
-        "Decoy Grenade" => Some("decoy"),
-        _ => None,
-    }
-}
-
 fn is_pistol_item(name: &str) -> bool {
     matches!(
         name,
@@ -144,14 +221,14 @@ fn is_primary_item(name: &str) -> bool {
 
 pub fn classify_inventory(
     items: &[String],
-) -> (Option<String>, Option<String>, usize, Vec<String>) {
+) -> (Option<String>, Option<String>, usize, Vec<GrenadeType>) {
     let mut primary: Option<String> = None;
     let mut secondary: Option<String> = None;
-    let mut grenade_types: Vec<String> = Vec::new();
+    let mut grenade_types: Vec<GrenadeType> = Vec::new();
     for it in items {
         let name = it.trim();
-        if let Some(gtype) = grenade_item_to_type(name) {
-            grenade_types.push(gtype.to_string());
+        if let Some(gtype) = GrenadeType::from_inventory_item(name) {
+            grenade_types.push(gtype);
         } else if primary.is_none() && is_primary_item(name) {
             primary = Some(name.to_string());
         } else if secondary.is_none() && is_pistol_item(name) {
@@ -250,19 +327,6 @@ pub fn bomb_site_from_place(place: Option<&str>) -> Option<&'static str> {
     match p.as_str() {
         "bombsitea" => Some("a"),
         "bombsiteb" => Some("b"),
-        _ => None,
-    }
-}
-
-pub fn bomb_type_map(ev_type: &str) -> Option<&'static str> {
-    match ev_type {
-        "plant" | "plant_begin" => Some("plant_begin"),
-        "planted" => Some("planted"),
-        "defuse" | "defuse_begin" => Some("defuse_begin"),
-        "defused" | "defuse_complete" => Some("defused"),
-        "explode" | "exploded" => Some("exploded"),
-        "dropped" => Some("dropped"),
-        "picked_up" => Some("picked_up"),
         _ => None,
     }
 }

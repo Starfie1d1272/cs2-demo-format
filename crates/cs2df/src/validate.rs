@@ -67,8 +67,8 @@ fn embedded_schema_str(key: &str) -> Option<&'static str> {
     }
 }
 
-pub fn load_schemas(spec_dir: Option<&Path>) -> Result<HashMap<String, Value>> {
-    let mut schemas = HashMap::new();
+pub fn load_validators(spec_dir: Option<&Path>) -> Result<HashMap<String, jsonschema::Validator>> {
+    let mut validators = HashMap::new();
     if let Some(dir) = spec_dir {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -77,7 +77,9 @@ pub fn load_schemas(spec_dir: Option<&Path>) -> Result<HashMap<String, Value>> {
                 if let Some(key) = name.strip_suffix(".schema.json") {
                     let text = std::fs::read_to_string(&path)?;
                     let val: Value = serde_json::from_str(&text)?;
-                    schemas.insert(key.to_string(), val);
+                    let v = jsonschema::draft7::new(&val)
+                        .map_err(|e| anyhow::anyhow!("{key}: invalid schema — {e}"))?;
+                    validators.insert(key.to_string(), v);
                 }
             }
         }
@@ -89,11 +91,13 @@ pub fn load_schemas(spec_dir: Option<&Path>) -> Result<HashMap<String, Value>> {
         {
             if let Some(text) = embedded_schema_str(key) {
                 let val: Value = serde_json::from_str(text)?;
-                schemas.insert(key.to_string(), val);
+                let v = jsonschema::draft7::new(&val)
+                    .map_err(|e| anyhow::anyhow!("{key}: invalid schema — {e}"))?;
+                validators.insert(key.to_string(), v);
             }
         }
     }
-    Ok(schemas)
+    Ok(validators)
 }
 
 pub fn decode_delta(values: &[i64]) -> Vec<i64> {
@@ -106,51 +110,6 @@ pub fn decode_delta(values: &[i64]) -> Vec<i64> {
     out
 }
 
-pub fn find_invalid_json_tokens(text: &str) -> Vec<(usize, &'static str)> {
-    let mut out = Vec::new();
-    let bytes = text.as_bytes();
-    let mut in_str = false;
-    let mut escape = false;
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if in_str {
-            if escape {
-                escape = false;
-            } else if b == b'\\' {
-                escape = true;
-            } else if b == b'"' {
-                in_str = false;
-            }
-            i += 1;
-            continue;
-        }
-        if b == b'"' {
-            in_str = true;
-            i += 1;
-            continue;
-        }
-        for tok in ["NaN", "-Infinity", "Infinity"] {
-            if text[i..].starts_with(tok) {
-                let before_ok = i == 0 || !is_ident_char(bytes[i - 1]);
-                let after_idx = i + tok.len();
-                let after_ok = after_idx >= bytes.len() || !is_ident_char(bytes[after_idx]);
-                if before_ok && after_ok {
-                    out.push((i, tok));
-                    i += tok.len();
-                    continue;
-                }
-            }
-        }
-        i += 1;
-    }
-    out
-}
-
-fn is_ident_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_'
-}
-
 pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> Result<bool> {
     let name = zip_path
         .file_name()
@@ -161,7 +120,7 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
 "
     );
 
-    let schemas = load_schemas(spec_dir)?;
+    let validators = load_validators(spec_dir)?;
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut data_by_key: HashMap<String, Value> = HashMap::new();
@@ -185,7 +144,7 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
     let Some(manifest) = read_json_from_zip(&mut archive, "manifest.json", &mut errors) else {
         return Ok(finish(&errors, &warnings, strict));
     };
-    validate_schema("manifest", &manifest, &schemas, &mut errors);
+    validate_schema("manifest", &manifest, &validators, &mut errors);
 
     let schema_version = manifest
         .get("schemaVersion")
@@ -236,7 +195,7 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
             let Some(value) = read_json_from_zip(&mut archive, filename, &mut errors) else {
                 continue;
             };
-            validate_schema(key, &value, &schemas, &mut errors);
+            validate_schema(key, &value, &validators, &mut errors);
             let count = value.as_array().map(|a| a.len()).unwrap_or(1);
             let unit = if count != 1 { "rows" } else { "row" };
             println!("  ✓ {filename} ({count} {unit})");
@@ -251,7 +210,7 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
 }
 
 pub fn validate_dir_fixture(dir: &Path, spec_dir: Option<&Path>, strict: bool) -> Result<bool> {
-    let schemas = load_schemas(spec_dir)?;
+    let validators = load_validators(spec_dir)?;
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut data_by_key: HashMap<String, Value> = HashMap::new();
@@ -263,7 +222,7 @@ pub fn validate_dir_fixture(dir: &Path, spec_dir: Option<&Path>, strict: bool) -
     }
     let raw_manifest = std::fs::read_to_string(&manifest_path)?;
     let manifest: Value = serde_json::from_str(&raw_manifest)?;
-    validate_schema("manifest", &manifest, &schemas, &mut errors);
+    validate_schema("manifest", &manifest, &validators, &mut errors);
 
     if let Some(m) = manifest.get("files").and_then(|v| v.as_object()) {
         for (key, val) in m {
@@ -280,13 +239,8 @@ pub fn validate_dir_fixture(dir: &Path, spec_dir: Option<&Path>, strict: bool) -
                 continue;
             }
             let text = std::fs::read_to_string(&p)?;
-            let invalid = find_invalid_json_tokens(&text);
-            if !invalid.is_empty() {
-                push_err(&mut errors, &format!("{filename}: invalid JSON tokens"));
-                continue;
-            }
             let value: Value = serde_json::from_str(&text)?;
-            validate_schema(key, &value, &schemas, &mut errors);
+            validate_schema(key, &value, &validators, &mut errors);
             data_by_key.insert(key.clone(), value);
         }
     }
@@ -323,19 +277,6 @@ fn read_json_from_zip(
         push_err(errors, &format!("{filename}: UTF-8 read error — {e}"));
         return None;
     }
-    let invalid = find_invalid_json_tokens(&raw);
-    if !invalid.is_empty() {
-        let sample: Vec<String> = invalid
-            .iter()
-            .take(5)
-            .map(|(off, tok)| format!("{tok}@{off}"))
-            .collect();
-        push_err(
-            errors,
-            &format!("{filename}: invalid JSON value(s): {}", sample.join(", ")),
-        );
-        return None;
-    }
     match serde_json::from_str::<Value>(&raw) {
         Ok(v) => Some(v),
         Err(e) => {
@@ -348,38 +289,32 @@ fn read_json_from_zip(
 fn validate_schema(
     key: &str,
     value: &Value,
-    schemas: &HashMap<String, Value>,
+    validators: &HashMap<String, jsonschema::Validator>,
     errors: &mut Vec<String>,
 ) {
-    let Some(schema) = schemas.get(key) else {
+    let Some(validator) = validators.get(key) else {
         push_err(errors, &format!("{key}: no JSON Schema found"));
         return;
     };
-    let validator = match jsonschema::draft7::new(schema) {
-        Ok(v) => v,
-        Err(e) => {
-            push_err(errors, &format!("{key}: invalid schema — {e}"));
-            return;
+    let mut count = 0usize;
+    for e in validator.iter_errors(value) {
+        if count < 20 {
+            let path_str = e.instance_path().to_string();
+            let path = if path_str.is_empty() {
+                "(root)"
+            } else {
+                &path_str
+            };
+            push_err(errors, &format!("{key}: [{path}] {e}"));
         }
-    };
-    let schema_errors: Vec<_> = validator.iter_errors(value).collect();
-    for e in schema_errors.iter().take(20) {
-        let path_str = e.instance_path().to_string();
-        let path = if path_str.is_empty() {
-            "(root)"
-        } else {
-            &path_str
-        };
-        push_err(errors, &format!("{key}: [{path}] {e}"));
-    }
-    if schema_errors.len() > 20 {
-        push_err(
-            errors,
-            &format!(
-                "{key}: {} additional schema error(s)",
-                schema_errors.len() - 20
-            ),
-        );
+        count += 1;
+        if count == 21 {
+            push_err(
+                errors,
+                &format!("{key}: additional schema error(s) truncated"),
+            );
+            break;
+        }
     }
 }
 

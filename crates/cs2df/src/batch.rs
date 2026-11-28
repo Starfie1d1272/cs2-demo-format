@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -11,7 +12,7 @@ use chrono::{DateTime, Local};
 use serde::Serialize;
 
 use crate::events::round_f64;
-use crate::package::{export_demo_merged_to_file, ExportOptions, MatchMeta};
+use crate::package::{export_demo_merged_with_target, ExportOptions, MatchMeta};
 
 #[derive(Debug, Clone)]
 pub struct LogicalMapJob {
@@ -251,6 +252,16 @@ fn mb_per_s(total_bytes: u64, duration_seconds: f64) -> f64 {
     round_f64((total_bytes as f64 / 1_000_000.0) / duration_seconds, 3)
 }
 
+fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        format!("panic: {s}")
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        format!("panic: {s}")
+    } else {
+        "panic: unknown payload".to_string()
+    }
+}
+
 pub fn run_batch(
     directory: &Path,
     opts: &ExportOptions,
@@ -264,14 +275,6 @@ pub fn run_batch(
     }
 
     let workers = workers.max(1).min(jobs.len());
-    let total_cpus = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
-    let rayon_threads = (total_cpus / workers).max(1);
-    let _ = rayon::ThreadPoolBuilder::new()
-        .num_threads(rayon_threads)
-        .build_global();
-
     let queue = Mutex::new(VecDeque::from(jobs));
     let results = Mutex::new(Vec::new());
     let stop = AtomicBool::new(false);
@@ -300,85 +303,55 @@ pub fn run_batch(
                 let started = Instant::now();
                 let part_refs: Vec<&Path> = job.parts.iter().map(PathBuf::as_path).collect();
 
-                let target_zip = directory.join(format!("{}.zip", job.logical_stem));
-                let res = export_demo_merged_to_file(&part_refs, &target_zip, opts, None);
-                let row = match res {
-                    Ok((zip_bytes, mut meta)) => {
-                        let write_started = Instant::now();
-                        let final_zip_path = if descriptive {
+                let res = catch_unwind(AssertUnwindSafe(|| {
+                    let mut reserved_path: Option<PathBuf> = None;
+                    let r = export_demo_merged_with_target(&part_refs, opts, None, |meta| {
+                        if descriptive {
                             let date_str = file_date_str(first_dem);
-                            let pref = build_descriptive_name(&meta, &job.logical_stem, &date_str);
+                            let pref = build_descriptive_name(meta, &job.logical_stem, &date_str);
                             let _guard = unique_lock.lock().unwrap();
-                            match allocate_unique_zip_path(directory, &pref, &job.logical_stem) {
-                                Ok(unique_p) => {
-                                    if let Err(e) = std::fs::rename(&target_zip, &unique_p) {
-                                        let _ = std::fs::remove_file(&unique_p);
-                                        Err(e.into())
-                                    } else {
-                                        Ok(unique_p)
-                                    }
-                                }
-                                Err(e) => Err(e),
-                            }
+                            let p = allocate_unique_zip_path(directory, &pref, &job.logical_stem)?;
+                            reserved_path = Some(p.clone());
+                            Ok(p)
                         } else {
-                            Ok(target_zip.clone())
-                        };
-                        match final_zip_path {
-                            Ok(zp) => {
-                                meta.timings_seconds.insert(
-                                    "batch.writeFile".to_string(),
-                                    round_f64(write_started.elapsed().as_secs_f64(), 3),
-                                );
-                                let dur = started.elapsed().as_secs_f64();
-                                let zip_name = zp
-                                    .file_name()
-                                    .map(|n| n.to_string_lossy().into_owned())
-                                    .unwrap_or_default();
-                                println!(
-                                    "  ok  {} -> {}  {:.1}MB  {:.1}s",
-                                    first_dem.file_name().unwrap_or_default().to_string_lossy(),
-                                    zip_name,
-                                    zip_bytes as f64 / 1e6,
-                                    dur
-                                );
-                                BatchItemRow {
-                                    demo: first_dem.display().to_string(),
-                                    zip: Some(zip_name),
-                                    ok: true,
-                                    error: None,
-                                    duration_seconds: round_f64(dur, 3),
-                                    demo_bytes,
-                                    zip_bytes,
-                                    compress_level: Some(meta.compress_level),
-                                    timings_seconds: Some(meta.timings_seconds),
-                                }
-                            }
-                            Err(e) => {
-                                let dur = started.elapsed().as_secs_f64();
-                                println!(
-                                    "  FAIL {}: {}  ({:.1}s)",
-                                    first_dem.file_name().unwrap_or_default().to_string_lossy(),
-                                    e,
-                                    dur
-                                );
-                                if fail_fast {
-                                    stop.store(true, Ordering::Relaxed);
-                                }
-                                BatchItemRow {
-                                    demo: first_dem.display().to_string(),
-                                    zip: None,
-                                    ok: false,
-                                    error: Some(e.to_string()),
-                                    duration_seconds: round_f64(dur, 3),
-                                    demo_bytes,
-                                    zip_bytes: 0,
-                                    compress_level: None,
-                                    timings_seconds: None,
-                                }
-                            }
+                            Ok(directory.join(format!("{}.zip", job.logical_stem)))
+                        }
+                    });
+                    if r.is_err() {
+                        if let Some(rp) = reserved_path {
+                            let _ = std::fs::remove_file(rp);
                         }
                     }
-                    Err(e) => {
+                    r
+                }));
+
+                let row = match res {
+                    Ok(Ok((zip_bytes, final_zip_path, meta))) => {
+                        let dur = started.elapsed().as_secs_f64();
+                        let zip_name = final_zip_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        println!(
+                            "  ok  {} -> {}  {:.1}MB  {:.1}s",
+                            first_dem.file_name().unwrap_or_default().to_string_lossy(),
+                            zip_name,
+                            zip_bytes as f64 / 1e6,
+                            dur
+                        );
+                        BatchItemRow {
+                            demo: first_dem.display().to_string(),
+                            zip: Some(zip_name),
+                            ok: true,
+                            error: None,
+                            duration_seconds: round_f64(dur, 3),
+                            demo_bytes,
+                            zip_bytes,
+                            compress_level: Some(meta.compress_level),
+                            timings_seconds: Some(meta.timings_seconds),
+                        }
+                    }
+                    Ok(Err(e)) => {
                         let dur = started.elapsed().as_secs_f64();
                         println!(
                             "  FAIL {}: {}  ({:.1}s)",
@@ -394,6 +367,30 @@ pub fn run_batch(
                             zip: None,
                             ok: false,
                             error: Some(e.to_string()),
+                            duration_seconds: round_f64(dur, 3),
+                            demo_bytes,
+                            zip_bytes: 0,
+                            compress_level: None,
+                            timings_seconds: None,
+                        }
+                    }
+                    Err(panic_err) => {
+                        let dur = started.elapsed().as_secs_f64();
+                        let msg = panic_message(panic_err);
+                        println!(
+                            "  FAIL {}: {}  ({:.1}s)",
+                            first_dem.file_name().unwrap_or_default().to_string_lossy(),
+                            msg,
+                            dur
+                        );
+                        if fail_fast {
+                            stop.store(true, Ordering::Relaxed);
+                        }
+                        BatchItemRow {
+                            demo: first_dem.display().to_string(),
+                            zip: None,
+                            ok: false,
+                            error: Some(msg),
                             duration_seconds: round_f64(dur, 3),
                             demo_bytes,
                             zip_bytes: 0,

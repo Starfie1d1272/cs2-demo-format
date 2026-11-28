@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -11,9 +11,10 @@ use sha2::{Digest, Sha256};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
+use crate::enums::GrenadeType;
 use crate::events::{
     build_blinds, build_bombs, build_clutches, build_damages, build_economies, build_grenades,
-    build_kills, build_match, build_player_stats, build_players, round_f64, MatchRow,
+    build_kills, build_match, build_player_stats, build_players, round_f64,
 };
 use crate::merge::parse_and_merge;
 use crate::parse::{parse_demo, ParseOptions, ProgressFn, RawDemo};
@@ -24,7 +25,7 @@ pub const SCHEMA_VERSION: &str = "cs2-demo-format/3.0";
 pub const EXPORTER_NAME: &str = "cs2df";
 pub const EXPORTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const PARSER_NAME: &str = "demoparser";
-pub const PARSER_VERSION: &str = "0.42.2";
+pub const PARSER_VERSION: &str = "0.42.2+39942c7";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,21 +101,26 @@ fn sha256_file(path: &Path) -> Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-pub fn export_demo_to_file(
-    dem_path: &Path,
-    out_zip: &Path,
-    opts: &ExportOptions,
-    progress: Option<ProgressFn<'_>>,
-) -> Result<(u64, MatchMeta)> {
-    export_demo_merged_to_file(&[dem_path], out_zip, opts, progress)
-}
-
 pub fn export_demo_merged_to_file(
     dem_paths: &[&Path],
     out_zip: &Path,
     opts: &ExportOptions,
     progress: Option<ProgressFn<'_>>,
 ) -> Result<(u64, MatchMeta)> {
+    let (bytes, _, meta) =
+        export_demo_merged_with_target(dem_paths, opts, progress, |_| Ok(out_zip.to_path_buf()))?;
+    Ok((bytes, meta))
+}
+
+pub fn export_demo_merged_with_target<F>(
+    dem_paths: &[&Path],
+    opts: &ExportOptions,
+    progress: Option<ProgressFn<'_>>,
+    choose_target: F,
+) -> Result<(u64, PathBuf, MatchMeta)>
+where
+    F: FnOnce(&MatchMeta) -> Result<PathBuf>,
+{
     let demo_hash = if dem_paths.len() == 1 {
         sha256_file(dem_paths[0]).ok()
     } else {
@@ -174,89 +180,29 @@ pub fn export_demo_merged_to_file(
         p("build package", 0.92);
     }
 
-    build_package_to_file(
+    build_package_streaming(
         &raw,
         dem_paths[0],
         demo_hash,
-        out_zip,
         opts.window_before_ms,
         opts.window_after_ms,
         opts.compress_level,
+        choose_target,
     )
 }
 
-pub fn build_package_to_file(
-    raw: &RawDemo,
-    dem_path: &Path,
-    demo_hash: Option<String>,
-    out_zip: &Path,
-    window_before_ms: i64,
-    window_after_ms: i64,
-    compress_level: u32,
-) -> Result<(u64, MatchMeta)> {
-    let (entries, match_json, mut timings) =
-        build_json_entries(raw, dem_path, demo_hash, window_before_ms, window_after_ms)?;
-
-    let st = Instant::now();
-    let zip_bytes = write_zip_atomic(&entries, out_zip, compress_level)?;
-    timings.insert(
-        "package.writeZip".to_string(),
-        round_f64(st.elapsed().as_secs_f64(), 3),
-    );
-
-    let meta = MatchMeta {
-        map_name: match_json.map_name.clone(),
-        team_a_name: match_json.team_a.name.clone(),
-        team_a_score: match_json.team_a.score,
-        team_b_name: match_json.team_b.name.clone(),
-        team_b_score: match_json.team_b.score,
-        timings_seconds: timings,
-        compress_level,
-    };
-    Ok((zip_bytes, meta))
-}
-
-pub fn build_package_bytes(
+fn build_package_streaming<F>(
     raw: &RawDemo,
     dem_path: &Path,
     demo_hash: Option<String>,
     window_before_ms: i64,
     window_after_ms: i64,
     compress_level: u32,
-) -> Result<(Vec<u8>, MatchMeta)> {
-    let (entries, match_json, mut timings) =
-        build_json_entries(raw, dem_path, demo_hash, window_before_ms, window_after_ms)?;
-
-    let st = Instant::now();
-    let mut buf = std::io::Cursor::new(Vec::new());
-    write_zip_stream(&entries, &mut buf, compress_level)?;
-    let data = buf.into_inner();
-    timings.insert(
-        "package.writeZip".to_string(),
-        round_f64(st.elapsed().as_secs_f64(), 3),
-    );
-
-    let meta = MatchMeta {
-        map_name: match_json.map_name.clone(),
-        team_a_name: match_json.team_a.name.clone(),
-        team_a_score: match_json.team_a.score,
-        team_b_name: match_json.team_b.name.clone(),
-        team_b_score: match_json.team_b.score,
-        timings_seconds: timings,
-        compress_level,
-    };
-    Ok((data, meta))
-}
-
-pub type ZipEntries = Vec<(&'static str, Vec<u8>)>;
-
-pub fn build_json_entries(
-    raw: &RawDemo,
-    dem_path: &Path,
-    demo_hash: Option<String>,
-    window_before_ms: i64,
-    window_after_ms: i64,
-) -> Result<(ZipEntries, MatchRow, BTreeMap<String, f64>)> {
+    choose_target: F,
+) -> Result<(u64, PathBuf, MatchMeta)>
+where
+    F: FnOnce(&MatchMeta) -> Result<PathBuf>,
+{
     let mut timings = raw.timings.clone();
     let tickrate = if raw.tickrate > 0 { raw.tickrate } else { 64 };
     let sample_rate = if raw.sample_rate > 0 {
@@ -272,11 +218,7 @@ pub fn build_json_entries(
         round_f64(st.elapsed().as_secs_f64(), 3),
     );
 
-    let team_map: HashMap<String, String> = players
-        .rows
-        .iter()
-        .map(|p| (p.steam_id64.clone(), p.team_key.clone()))
-        .collect();
+    let team_map = players.team_by_sid.clone();
 
     let st = Instant::now();
     let (mut rounds, round_model) = build_rounds(
@@ -304,7 +246,7 @@ pub fn build_json_entries(
     );
     let mut flash_lookup: HashMap<(i64, i64), String> = HashMap::new();
     for g in &grenades {
-        if g.grenade == "flashbang" {
+        if g.grenade == GrenadeType::Flashbang {
             if let Some(gid) = &g.grenade_id {
                 flash_lookup.insert((g.round_number, g.effect_tick), gid.clone());
             }
@@ -315,8 +257,7 @@ pub fn build_json_entries(
     let clutches = build_clutches(&kills, &rounds, &players);
     let economies = build_economies(&raw.economy_raw, &players, &round_model, &mut rounds);
     let player_stats = build_player_stats(
-        &raw.bomb_planted,
-        &raw.bomb_defused,
+        &raw.bomb_events,
         &players,
         &round_model,
         &rounds,
@@ -325,17 +266,7 @@ pub fn build_json_entries(
         &damages,
         &clutches,
     );
-    let bombs = build_bombs(
-        &raw.bomb_planted,
-        &raw.bomb_defused,
-        &raw.bomb_exploded,
-        &raw.bomb_beginplant,
-        &raw.bomb_begindefuse,
-        &raw.bomb_dropped,
-        &raw.bomb_pickup,
-        &players,
-        &round_model,
-    );
+    let bombs = build_bombs(&raw.bomb_events, &players, &round_model);
     let match_json = build_match(
         &raw.header,
         tickrate,
@@ -349,7 +280,7 @@ pub fn build_json_entries(
     );
 
     let st = Instant::now();
-    let shots = build_shots(&raw.fires, &raw.fire_velocity, &players, &round_model);
+    let shots = build_shots(&raw.fires, &players, &round_model);
     timings.insert(
         "package.shots".to_string(),
         round_f64(st.elapsed().as_secs_f64(), 3),
@@ -357,7 +288,7 @@ pub fn build_json_entries(
 
     let st = Instant::now();
     let replay = build_replay(
-        &raw.replay_rows,
+        &raw.replay_cols,
         &raw.grenade_trajectories,
         &players,
         &round_model,
@@ -371,7 +302,7 @@ pub fn build_json_entries(
 
     let st = Instant::now();
     let duels = build_duels(
-        &raw.duel_rows,
+        &raw.duel_cols,
         &raw.duel_windows,
         &players,
         &round_model,
@@ -387,8 +318,6 @@ pub fn build_json_entries(
     );
 
     let mut files = BTreeMap::new();
-    let mut entries: ZipEntries = Vec::with_capacity(15);
-
     files.insert("match".to_string(), "match.json".to_string());
     files.insert("players".to_string(), "players.json".to_string());
     files.insert("rounds".to_string(), "rounds.json".to_string());
@@ -443,59 +372,18 @@ pub fn build_json_entries(
         files,
     };
 
-    entries.push(("manifest.json", serde_json::to_vec(&manifest)?));
-    entries.push(("match.json", serde_json::to_vec(&match_json)?));
-    entries.push(("players.json", serde_json::to_vec(&players.rows)?));
-    entries.push(("rounds.json", serde_json::to_vec(&rounds)?));
-    entries.push(("player-stats.json", serde_json::to_vec(&player_stats)?));
-    entries.push(("player-economies.json", serde_json::to_vec(&economies)?));
-    entries.push(("kills.json", serde_json::to_vec(&kills)?));
-    entries.push(("damages.json", serde_json::to_vec(&damages)?));
-    entries.push(("blinds.json", serde_json::to_vec(&blinds)?));
-    entries.push(("bombs.json", serde_json::to_vec(&bombs)?));
-    entries.push(("grenades.json", serde_json::to_vec(&grenades)?));
-    entries.push(("clutches.json", serde_json::to_vec(&clutches)?));
-    if let Some(s) = shots {
-        entries.push(("shots.json", serde_json::to_vec(&s)?));
-    }
-    if let Some(r) = replay {
-        entries.push(("replay.json", serde_json::to_vec(&r)?));
-    }
-    if let Some(d) = duels {
-        entries.push(("duels.json", serde_json::to_vec(&d)?));
-    }
-
-    Ok((entries, match_json, timings))
-}
-
-fn write_zip_stream<W: Write + std::io::Seek>(
-    entries: &[(&'static str, Vec<u8>)],
-    writer: W,
-    compress_level: u32,
-) -> Result<()> {
-    let method = if compress_level == 0 {
-        CompressionMethod::Stored
-    } else {
-        CompressionMethod::Deflated
+    let mut meta = MatchMeta {
+        map_name: match_json.map_name.clone(),
+        team_a_name: match_json.team_a.name.clone(),
+        team_a_score: match_json.team_a.score,
+        team_b_name: match_json.team_b.name.clone(),
+        team_b_score: match_json.team_b.score,
+        timings_seconds: timings,
+        compress_level,
     };
-    let mut options = SimpleFileOptions::default().compression_method(method);
-    if compress_level > 0 {
-        options = options.compression_level(Some(compress_level as i64));
-    }
-    let mut zw = ZipWriter::new(writer);
-    for (name, bytes) in entries {
-        zw.start_file(*name, options)?;
-        zw.write_all(bytes)?;
-    }
-    zw.finish()?;
-    Ok(())
-}
 
-pub fn write_zip_atomic(
-    entries: &[(&'static str, Vec<u8>)],
-    out_zip: &Path,
-    compress_level: u32,
-) -> Result<u64> {
+    let out_zip = choose_target(&meta)?;
+    let st = Instant::now();
     let parent = out_zip.parent().unwrap_or_else(|| Path::new("."));
     if !parent.as_os_str().is_empty() {
         std::fs::create_dir_all(parent)?;
@@ -504,18 +392,79 @@ pub fn write_zip_atomic(
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "export.zip".to_string());
-    let tmp_path: PathBuf = parent.join(format!(".{fname}.tmp.{}", std::process::id()));
+    let tmp_path = parent.join(format!(".{fname}.tmp.{}", std::process::id()));
 
-    let res = (|| -> Result<u64> {
+    let write_res = (|| -> Result<u64> {
         {
             let f = File::create(&tmp_path)
                 .with_context(|| format!("failed to create temp zip: {}", tmp_path.display()))?;
-            let mut bw = std::io::BufWriter::with_capacity(1 << 20, f);
-            write_zip_stream(entries, &mut bw, compress_level)?;
+            let bw = BufWriter::with_capacity(1 << 20, f);
+            let mut zw = ZipWriter::new(bw);
+
+            let method = if compress_level == 0 {
+                CompressionMethod::Stored
+            } else {
+                CompressionMethod::Deflated
+            };
+            let mut options = SimpleFileOptions::default().compression_method(method);
+            if compress_level > 0 {
+                options = options.compression_level(Some(compress_level as i64));
+            }
+
+            zw.start_file("manifest.json", options)?;
+            serde_json::to_writer(&mut zw, &manifest)?;
+
+            zw.start_file("match.json", options)?;
+            serde_json::to_writer(&mut zw, &match_json)?;
+
+            zw.start_file("players.json", options)?;
+            serde_json::to_writer(&mut zw, &players.rows)?;
+
+            zw.start_file("rounds.json", options)?;
+            serde_json::to_writer(&mut zw, &rounds)?;
+
+            zw.start_file("player-stats.json", options)?;
+            serde_json::to_writer(&mut zw, &player_stats)?;
+
+            zw.start_file("player-economies.json", options)?;
+            serde_json::to_writer(&mut zw, &economies)?;
+
+            zw.start_file("kills.json", options)?;
+            serde_json::to_writer(&mut zw, &kills)?;
+
+            zw.start_file("damages.json", options)?;
+            serde_json::to_writer(&mut zw, &damages)?;
+
+            zw.start_file("blinds.json", options)?;
+            serde_json::to_writer(&mut zw, &blinds)?;
+
+            zw.start_file("bombs.json", options)?;
+            serde_json::to_writer(&mut zw, &bombs)?;
+
+            zw.start_file("grenades.json", options)?;
+            serde_json::to_writer(&mut zw, &grenades)?;
+
+            zw.start_file("clutches.json", options)?;
+            serde_json::to_writer(&mut zw, &clutches)?;
+
+            if let Some(s) = shots {
+                zw.start_file("shots.json", options)?;
+                serde_json::to_writer(&mut zw, &s)?;
+            }
+            if let Some(r) = replay {
+                zw.start_file("replay.json", options)?;
+                serde_json::to_writer(&mut zw, &r)?;
+            }
+            if let Some(d) = duels {
+                zw.start_file("duels.json", options)?;
+                serde_json::to_writer(&mut zw, &d)?;
+            }
+
+            let mut bw = zw.finish()?;
             bw.flush()?;
         }
         let size = std::fs::metadata(&tmp_path)?.len();
-        std::fs::rename(&tmp_path, out_zip).with_context(|| {
+        std::fs::rename(&tmp_path, &out_zip).with_context(|| {
             format!(
                 "failed to rename {} -> {}",
                 tmp_path.display(),
@@ -525,8 +474,13 @@ pub fn write_zip_atomic(
         Ok(size)
     })();
 
-    if res.is_err() {
+    if write_res.is_err() {
         let _ = std::fs::remove_file(&tmp_path);
     }
-    res
+    let zip_bytes = write_res?;
+    meta.timings_seconds.insert(
+        "package.writeZip".to_string(),
+        round_f64(st.elapsed().as_secs_f64(), 3),
+    );
+    Ok((zip_bytes, out_zip, meta))
 }
