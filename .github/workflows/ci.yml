@@ -61,3 +61,53 @@ jobs:
       - run: uv run --locked --no-config --default-index https://pypi.org/simple ruff check src tests ../tools
 
       - run: uv run --locked --no-config --default-index https://pypi.org/simple pytest
+
+  rust:
+    name: rust / lint & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: "1.100.0"
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - run: cargo fmt -p cs2df --check
+
+      - run: cargo clippy -p cs2df --all-targets --no-deps -- -D warnings
+
+      - run: cargo test --workspace
+
+      - name: validate fixtures/v3-mid with cs2df
+        run: |
+          cargo build --release -p cs2df
+          (cd fixtures/v3-mid && zip -q /tmp/v3-mid.zip *.json)
+          ./target/release/cs2df validate /tmp/v3-mid.zip --strict
+
+  rust-build-matrix:
+    name: rust / build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: "1.100.0"
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - run: cargo build --release -p cs2df --target ${{ matrix.target }}
