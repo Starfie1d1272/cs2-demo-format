@@ -123,22 +123,6 @@
               "maximum": 9007199254740991
             }
           },
-          "aimPunchX": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            }
-          },
-          "aimPunchY": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991
-            }
-          },
           "accuracyPenalty": {
             "type": "array",
             "items": {

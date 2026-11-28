@@ -222,8 +222,6 @@ pub struct FireRawRow {
     pub velocity_x: Option<f64>,
     pub velocity_y: Option<f64>,
     pub velocity_z: Option<f64>,
-    pub aim_punch_x: Option<f64>,
-    pub aim_punch_y: Option<f64>,
     pub accuracy_penalty: Option<f64>,
     pub recoil_idx: Option<i64>,
     pub ammo: Option<i64>,
@@ -807,10 +805,6 @@ pub struct ShotTrack {
     pub yaw: Vec<i64>,
     pub pitch: Vec<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub aim_punch_x: Option<Vec<i64>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub aim_punch_y: Option<Vec<i64>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub accuracy_penalty: Option<Vec<i64>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recoil_idx: Option<Vec<i64>>,
@@ -905,14 +899,10 @@ pub fn build_shots(
         let mut vx_vals = Vec::with_capacity(rows.len());
         let mut vy_vals = Vec::with_capacity(rows.len());
         let mut vz_vals = Vec::with_capacity(rows.len());
-        let mut ap_x_vals = Vec::with_capacity(rows.len());
-        let mut ap_y_vals = Vec::with_capacity(rows.len());
         let mut acc_vals = Vec::with_capacity(rows.len());
         let mut rec_vals = Vec::with_capacity(rows.len());
         let mut ammo_vals = Vec::with_capacity(rows.len());
         let mut flag_vals = Vec::with_capacity(rows.len());
-        let mut any_ap_x = false;
-        let mut any_ap_y = false;
         let mut any_acc = false;
         let mut any_rec = false;
         let mut any_ammo = false;
@@ -926,16 +916,6 @@ pub fn build_shots(
             ));
             vz_vals.push(round_ties_even_i64(
                 r.velocity_z.filter(|v| v.is_finite()).unwrap_or(0.0),
-            ));
-            let ap_x = r.aim_punch_x.filter(|v| v.is_finite());
-            any_ap_x |= ap_x.is_some();
-            ap_x_vals.push(round_ties_even_i64(
-                ap_x.unwrap_or(0.0) * ANGLE_SCALE as f64,
-            ));
-            let ap_y = r.aim_punch_y.filter(|v| v.is_finite());
-            any_ap_y |= ap_y.is_some();
-            ap_y_vals.push(round_ties_even_i64(
-                ap_y.unwrap_or(0.0) * ANGLE_SCALE as f64,
             ));
             let acc = r.accuracy_penalty.filter(|v| v.is_finite());
             any_acc |= acc.is_some();
@@ -961,8 +941,6 @@ pub fn build_shots(
             vz: vz_vals,
             yaw: delta_encode(&yaws),
             pitch: delta_encode(&pitches),
-            aim_punch_x: if any_ap_x { Some(ap_x_vals) } else { None },
-            aim_punch_y: if any_ap_y { Some(ap_y_vals) } else { None },
             accuracy_penalty: if any_acc { Some(acc_vals) } else { None },
             recoil_idx: if any_rec { Some(rec_vals) } else { None },
             ammo: if any_ammo { Some(ammo_vals) } else { None },

@@ -46,14 +46,7 @@ const DUEL_OPTIONAL_COLS: [&str; 1] = ["flags"];
 const SHOT_COLS: [&str; 10] = [
     "tick", "weapon", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch",
 ];
-const SHOT_OPTIONAL_COLS: [&str; 6] = [
-    "aimPunchX",
-    "aimPunchY",
-    "accuracyPenalty",
-    "recoilIdx",
-    "ammo",
-    "flags",
-];
+const SHOT_OPTIONAL_COLS: [&str; 4] = ["accuracyPenalty", "recoilIdx", "ammo", "flags"];
 
 fn embedded_schema_str(key: &str) -> Option<&'static str> {
     match key {

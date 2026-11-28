@@ -1061,11 +1061,17 @@ pub fn build_weapons(
         let Some(event_end) = round_model.event_end_tick(rn) else {
             continue;
         };
-        let start_tick = s.start_tick.max(window.freeze_end_tick);
-        let end_tick = s.end_tick.min(event_end);
-        if start_tick > end_tick {
+        // Spans are already split at round_start / freeze_end boundaries during extraction;
+        // require both endpoints to lie within [freeze_end_tick, event_end] so start/end
+        // ticks and positions always come from the same real observations.
+        if s.start_tick < window.freeze_end_tick
+            || s.end_tick > event_end
+            || s.start_tick > s.end_tick
+        {
             continue;
         }
+        let start_tick = s.start_tick;
+        let end_tick = s.end_tick;
         let Some(weapon) = normalize_weapon_name(Some(&s.weapon)) else {
             continue;
         };

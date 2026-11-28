@@ -209,20 +209,6 @@ fn var_u64(v: Option<&Variant>) -> Option<u64> {
     }
 }
 
-fn var_vec_xy(v: Option<&Variant>) -> (Option<f64>, Option<f64>) {
-    match v {
-        Some(Variant::VecXYZ([x, y, _])) => (
-            x.is_finite().then_some(*x as f64),
-            y.is_finite().then_some(*y as f64),
-        ),
-        Some(Variant::VecXY([x, y])) => (
-            x.is_finite().then_some(*x as f64),
-            y.is_finite().then_some(*y as f64),
-        ),
-        _ => (None, None),
-    }
-}
-
 fn var_f64(v: Option<&Variant>) -> Option<f64> {
     match v? {
         Variant::F32(x) if x.is_finite() => Some(*x as f64),
@@ -908,7 +894,149 @@ fn extract_grenade_paths(
     Ok((throws, trajectories, inferno_fires))
 }
 
-fn extract_weapon_spans(mmap: &[u8]) -> Result<Vec<WeaponSpanRaw>> {
+struct ActiveWeaponSpan {
+    weapon_id: usize,
+    prev_sid: Option<u64>,
+    bucket: usize,
+    start_tick: i64,
+    end_tick: i64,
+    start_x: i64,
+    start_y: i64,
+    start_z: i64,
+    end_x: i64,
+    end_y: i64,
+    end_z: i64,
+}
+
+/// Aggregates per-tick ground weapon observations into contiguous spans per entity_id,
+/// splitting on weapon change, previous_owner change, tick gaps > 2, or round boundaries.
+pub struct WeaponSpanAggregator {
+    boundaries: Vec<i64>,
+    weapon_names: Vec<String>,
+    weapon_idx_map: HashMap<String, usize>,
+    active_by_eid: HashMap<i64, ActiveWeaponSpan>,
+    spans: Vec<WeaponSpanRaw>,
+}
+
+impl WeaponSpanAggregator {
+    pub fn new(mut boundaries: Vec<i64>) -> Self {
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        Self {
+            boundaries,
+            weapon_names: Vec::new(),
+            weapon_idx_map: HashMap::new(),
+            active_by_eid: HashMap::new(),
+            spans: Vec::new(),
+        }
+    }
+
+    pub fn push(
+        &mut self,
+        tick: i64,
+        eid: i64,
+        weapon: &str,
+        prev_sid: Option<u64>,
+        pos: [Option<f64>; 3],
+    ) {
+        if weapon.is_empty() {
+            return;
+        }
+        let [Some(fx), Some(fy), Some(fz)] = pos else {
+            return;
+        };
+        if !(fx.is_finite() && fy.is_finite() && fz.is_finite()) {
+            return;
+        }
+        let ix = round_ties_even_i64(fx);
+        let iy = round_ties_even_i64(fy);
+        let iz = round_ties_even_i64(fz);
+        let bucket = self.boundaries.partition_point(|&b| b <= tick);
+
+        let weapon_id = if let Some(&id) = self.weapon_idx_map.get(weapon) {
+            id
+        } else {
+            let id = self.weapon_names.len();
+            self.weapon_names.push(weapon.to_string());
+            self.weapon_idx_map.insert(weapon.to_string(), id);
+            id
+        };
+
+        match self.active_by_eid.get_mut(&eid) {
+            Some(cur)
+                if cur.weapon_id == weapon_id
+                    && cur.prev_sid == prev_sid
+                    && cur.bucket == bucket
+                    && tick >= cur.end_tick
+                    && (tick - cur.end_tick) <= 2 =>
+            {
+                cur.end_tick = tick;
+                cur.end_x = ix;
+                cur.end_y = iy;
+                cur.end_z = iz;
+            }
+            mut slot => {
+                if let Some(prev) = slot.take() {
+                    self.spans.push(WeaponSpanRaw {
+                        entity_id: eid,
+                        weapon: self.weapon_names[prev.weapon_id].clone(),
+                        prev_owner_steamid: prev.prev_sid,
+                        start_tick: prev.start_tick,
+                        end_tick: prev.end_tick,
+                        start_x: prev.start_x,
+                        start_y: prev.start_y,
+                        start_z: prev.start_z,
+                        end_x: prev.end_x,
+                        end_y: prev.end_y,
+                        end_z: prev.end_z,
+                    });
+                }
+                self.active_by_eid.insert(
+                    eid,
+                    ActiveWeaponSpan {
+                        weapon_id,
+                        prev_sid,
+                        bucket,
+                        start_tick: tick,
+                        end_tick: tick,
+                        start_x: ix,
+                        start_y: iy,
+                        start_z: iz,
+                        end_x: ix,
+                        end_y: iy,
+                        end_z: iz,
+                    },
+                );
+            }
+        }
+    }
+
+    pub fn finish(mut self) -> Vec<WeaponSpanRaw> {
+        for (eid, prev) in self.active_by_eid {
+            self.spans.push(WeaponSpanRaw {
+                entity_id: eid,
+                weapon: self.weapon_names[prev.weapon_id].clone(),
+                prev_owner_steamid: prev.prev_sid,
+                start_tick: prev.start_tick,
+                end_tick: prev.end_tick,
+                start_x: prev.start_x,
+                start_y: prev.start_y,
+                start_z: prev.start_z,
+                end_x: prev.end_x,
+                end_y: prev.end_y,
+                end_z: prev.end_z,
+            });
+        }
+        self.spans
+    }
+}
+
+fn extract_weapon_spans(
+    mmap: &[u8],
+    round_starts: &[RoundMarkerRow],
+    round_freeze_ends: &[RoundMarkerRow],
+    round_ends: &[RoundMarkerRow],
+) -> Result<Vec<WeaponSpanRaw>> {
     let out = run_parser_ex(mmap, &[], &[], &[], &[], true, false, true, false)?;
     let tick_col = out.df.get(&TICK_ID);
     let eid_col = out.df.get(&ENTITY_ID_ID);
@@ -922,26 +1050,14 @@ fn extract_weapon_spans(mmap: &[u8]) -> Result<Vec<WeaponSpanRaw>> {
         return Ok(Vec::new());
     }
 
-    // Aggregate observation spans in-place per entity_id directly from columnar buffers,
-    // using an interned weapon table to avoid per-tick String/WRow allocations.
-    struct ActiveSpan {
-        weapon_id: usize,
-        prev_sid: Option<u64>,
-        start_tick: i64,
-        end_tick: i64,
-        start_x: i64,
-        start_y: i64,
-        start_z: i64,
-        end_x: i64,
-        end_y: i64,
-        end_z: i64,
+    let mut boundaries = Vec::with_capacity(round_starts.len() + round_freeze_ends.len() + 1);
+    boundaries.extend(round_starts.iter().map(|r| r.tick));
+    boundaries.extend(round_freeze_ends.iter().map(|r| r.tick));
+    if let Some(last_end) = round_ends.iter().map(|r| r.tick).max() {
+        boundaries.push(last_end + 1);
     }
 
-    let mut weapon_names: Vec<String> = Vec::new();
-    let mut weapon_idx_map: HashMap<String, usize> = HashMap::new();
-    let mut active_by_eid: HashMap<i64, ActiveSpan> = HashMap::new();
-    let mut spans: Vec<WeaponSpanRaw> = Vec::new();
-
+    let mut agg = WeaponSpanAggregator::new(boundaries);
     for i in 0..n_rows {
         let (Some(tick), Some(eid)) = (col_i64(tick_col, i), col_i64(eid_col, i)) else {
             continue;
@@ -949,87 +1065,15 @@ fn extract_weapon_spans(mmap: &[u8]) -> Result<Vec<WeaponSpanRaw>> {
         let Some(w_str) = col_str_ref(name_col, i) else {
             continue;
         };
-        if w_str.is_empty() {
-            continue;
-        }
-        let weapon_id = if let Some(&id) = weapon_idx_map.get(w_str) {
-            id
-        } else {
-            let id = weapon_names.len();
-            weapon_names.push(w_str.to_string());
-            weapon_idx_map.insert(w_str.to_string(), id);
-            id
-        };
-        let prev_sid = col_u64(sid_col, i);
-        let x = round_ties_even_i64(col_f64(x_col, i).unwrap_or(0.0));
-        let y = round_ties_even_i64(col_f64(y_col, i).unwrap_or(0.0));
-        let z = round_ties_even_i64(col_f64(z_col, i).unwrap_or(0.0));
-
-        match active_by_eid.get_mut(&eid) {
-            Some(cur)
-                if cur.weapon_id == weapon_id
-                    && tick >= cur.end_tick
-                    && (tick - cur.end_tick) <= 64 =>
-            {
-                cur.end_tick = tick;
-                cur.end_x = x;
-                cur.end_y = y;
-                cur.end_z = z;
-                if cur.prev_sid.is_none() && prev_sid.is_some() {
-                    cur.prev_sid = prev_sid;
-                }
-            }
-            mut slot => {
-                if let Some(prev) = slot.take() {
-                    spans.push(WeaponSpanRaw {
-                        entity_id: eid,
-                        weapon: weapon_names[prev.weapon_id].clone(),
-                        prev_owner_steamid: prev.prev_sid,
-                        start_tick: prev.start_tick,
-                        end_tick: prev.end_tick,
-                        start_x: prev.start_x,
-                        start_y: prev.start_y,
-                        start_z: prev.start_z,
-                        end_x: prev.end_x,
-                        end_y: prev.end_y,
-                        end_z: prev.end_z,
-                    });
-                }
-                active_by_eid.insert(
-                    eid,
-                    ActiveSpan {
-                        weapon_id,
-                        prev_sid,
-                        start_tick: tick,
-                        end_tick: tick,
-                        start_x: x,
-                        start_y: y,
-                        start_z: z,
-                        end_x: x,
-                        end_y: y,
-                        end_z: z,
-                    },
-                );
-            }
-        }
+        agg.push(
+            tick,
+            eid,
+            w_str,
+            col_u64(sid_col, i),
+            [col_f64(x_col, i), col_f64(y_col, i), col_f64(z_col, i)],
+        );
     }
-
-    for (eid, prev) in active_by_eid {
-        spans.push(WeaponSpanRaw {
-            entity_id: eid,
-            weapon: weapon_names[prev.weapon_id].clone(),
-            prev_owner_steamid: prev.prev_sid,
-            start_tick: prev.start_tick,
-            end_tick: prev.end_tick,
-            start_x: prev.start_x,
-            start_y: prev.start_y,
-            start_z: prev.start_z,
-            end_x: prev.end_x,
-            end_y: prev.end_y,
-            end_z: prev.end_z,
-        });
-    }
-    Ok(spans)
+    Ok(agg.finish())
 }
 
 pub fn parse_demo(
@@ -1321,9 +1365,7 @@ pub fn parse_demo(
             "velocity_X",
             "velocity_Y",
             "velocity_Z",
-            "aim_punch_angle",
             "accuracy_penalty",
-            "i_recoil_idx",
             "fl_recoil_idx",
             "active_weapon_ammo",
             "is_scoped",
@@ -1343,10 +1385,7 @@ pub fn parse_demo(
         .into_iter()
         .filter(|ev| ev.name == "weapon_fire")
         .map(|ev| {
-            let (ap_x, ap_y) = var_vec_xy(event_field(&ev, "user_aim_punch_angle"));
-            let recoil = var_f64(event_field(&ev, "user_fl_recoil_idx"))
-                .map(round_ties_even_i64)
-                .or_else(|| var_i64(event_field(&ev, "user_i_recoil_idx")));
+            let recoil = var_f64(event_field(&ev, "user_fl_recoil_idx")).map(round_ties_even_i64);
             let scp = var_bool_opt(event_field(&ev, "user_is_scoped"));
             let wlk = var_bool_opt(event_field(&ev, "user_is_walking"));
             let air = var_bool_opt(event_field(&ev, "user_is_airborne"));
@@ -1386,8 +1425,6 @@ pub fn parse_demo(
                 velocity_x: var_f64(event_field_ci(&ev, "user_velocity_X")),
                 velocity_y: var_f64(event_field_ci(&ev, "user_velocity_Y")),
                 velocity_z: var_f64(event_field_ci(&ev, "user_velocity_Z")),
-                aim_punch_x: ap_x,
-                aim_punch_y: ap_y,
                 accuracy_penalty: var_f64(event_field(&ev, "user_accuracy_penalty")),
                 recoil_idx: recoil,
                 ammo: var_i64(event_field(&ev, "user_active_weapon_ammo")),
@@ -1693,7 +1730,7 @@ pub fn parse_demo(
     // Pass 6b: ground weapons lifecycle
     report("ground weapons", 0.79);
     let st = Instant::now();
-    let weapon_spans = extract_weapon_spans(&mmap)?;
+    let weapon_spans = extract_weapon_spans(&mmap, &round_starts, &round_freeze_ends, &round_ends)?;
     record(&mut timings, "parse.weapons", st);
 
     // Pass 7 (--research): duel windows directly into columnar DuelColumns

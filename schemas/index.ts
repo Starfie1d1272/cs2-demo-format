@@ -465,10 +465,6 @@ export const shotTrackSchema = z
     /** delta; view angles in degrees × angleScale */
     yaw: deltaIntArray,
     pitch: deltaIntArray,
-    /** plain; aim punch X (pitch) in degrees × angleScale (3.1+) */
-    aimPunchX: intArray.optional(),
-    /** plain; aim punch Y (yaw) in degrees × angleScale (3.1+) */
-    aimPunchY: intArray.optional(),
     /** plain; weapon accuracy penalty × 1000 (3.1+) */
     accuracyPenalty: intArray.optional(),
     /** plain; weapon recoil index (3.1+) */

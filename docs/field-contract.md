@@ -305,7 +305,6 @@ v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 | `tracks[].x` / `y` / `z` | delta；开枪者位置 |
 | `tracks[].vx` / `vy` / `vz` | 速度（非 delta，帧间无相关性） |
 | `tracks[].yaw` / `pitch` | delta；视角角度 × angleScale |
-| `tracks[].aimPunchX` / `aimPunchY` | plain（可选，3.1+）；aim punch × angleScale |
 | `tracks[].accuracyPenalty` | plain（可选，3.1+）；精度惩罚 × 1000 |
 | `tracks[].recoilIdx` | plain（可选，3.1+）；后坐力索引 |
 | `tracks[].ammo` | plain（可选，3.1+）；当前弹匣子弹数 |
