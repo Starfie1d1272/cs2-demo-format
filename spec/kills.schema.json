@@ -152,6 +152,9 @@
           "z"
         ],
         "additionalProperties": false
+      },
+      "killerBlinded": {
+        "type": "boolean"
       }
     },
     "required": [

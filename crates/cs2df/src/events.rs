@@ -65,6 +65,7 @@ pub struct PlayerRow {
     pub steam_id64: String,
     pub name: String,
     pub team_key: TeamKey,
+    pub crosshair_code: Option<String>,
     #[serde(skip)]
     pub steam_id_num: u64,
 }
@@ -136,6 +137,7 @@ pub fn build_players(player_info: &[PlayerInfoRow]) -> PlayerDirectory {
             steam_id64: sid_str,
             name,
             team_key,
+            crosshair_code: r.crosshair_code.clone(),
             steam_id_num: sid,
         });
     }
@@ -271,6 +273,7 @@ pub struct DeathRawRow {
     pub thrusmoke: bool,
     pub noscope: bool,
     pub penetrated: i64,
+    pub attackerblind: Option<bool>,
     pub attacker_x: Option<f64>,
     pub attacker_y: Option<f64>,
     pub attacker_z: Option<f64>,
@@ -300,6 +303,8 @@ pub struct KillRow {
     pub penetrated_objects: i64,
     pub killer_position: Option<Pos3>,
     pub victim_position: Pos3,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub killer_blinded: Option<bool>,
 }
 
 pub fn build_kills(
@@ -348,6 +353,7 @@ pub fn build_kills(
             penetrated_objects: r.penetrated,
             killer_position: Pos3::from_opts_nullable(r.attacker_x, r.attacker_y, r.attacker_z),
             victim_position: Pos3::from_opts(r.user_x, r.user_y, r.user_z),
+            killer_blinded: r.attackerblind,
         });
     }
     let trade_window = 6 * tickrate.max(1);
@@ -605,10 +611,12 @@ pub fn build_bombs(
         }
         let is_round_site_type = matches!(
             r.kind,
-            BombEventKind::Planted
+            BombEventKind::PlantAbort
+                | BombEventKind::Planted
+                | BombEventKind::DefuseBegin
+                | BombEventKind::DefuseAbort
                 | BombEventKind::Defused
                 | BombEventKind::Exploded
-                | BombEventKind::DefuseBegin
         );
         let mut site = bomb_site_from_place(r.user_last_place_name.as_deref());
         if site.is_none() && is_round_site_type {
@@ -661,6 +669,15 @@ pub struct GrenadeExpireRaw {
     pub z: Option<f64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct InfernoFireRaw {
+    pub entity_id: i64,
+    pub start_tick: i64,
+    pub end_tick: i64,
+    pub steamid: Option<u64>,
+    pub fire_points: Vec<Pos3>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GrenadeRow {
@@ -675,6 +692,8 @@ pub struct GrenadeRow {
     pub thrower_index: usize,
     pub throw_position: Pos3,
     pub effect_position: Pos3,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fire_points: Option<Vec<Pos3>>,
 }
 
 pub fn build_grenades(
@@ -682,6 +701,7 @@ pub fn build_grenades(
     grenade_detonations: &[GrenadeDetonationRaw],
     inferno_expires: &[GrenadeExpireRaw],
     smoke_expires: &[GrenadeExpireRaw],
+    inferno_fires: &[InfernoFireRaw],
     players: &PlayerDirectory,
     round_model: &RoundModel,
 ) -> Vec<GrenadeRow> {
@@ -794,6 +814,7 @@ pub fn build_grenades(
             thrower_index: thrower_idx,
             throw_position: throw_pos,
             effect_position: Pos3::from_opts(r.x, r.y, r.z),
+            fire_points: None,
         });
     }
 
@@ -889,6 +910,194 @@ pub fn build_grenades(
         }
     }
 
+    // attach CInferno fire points to molotov / incendiary grenades:
+    // 1) prefer direct entity_id match;
+    // 2) fallback to spatiotemporal match using fire centroid with explicit distance cap.
+    struct FireItem<'a> {
+        rn: i64,
+        thrower_idx: Option<usize>,
+        centroid_x: i64,
+        centroid_y: i64,
+        raw: &'a InfernoFireRaw,
+        used: bool,
+    }
+    let mut fire_items: Vec<FireItem<'_>> = inferno_fires
+        .iter()
+        .filter_map(|f| {
+            if f.fire_points.is_empty() {
+                return None;
+            }
+            let rn = round_model.round_for_tick(f.start_tick)?;
+            let n_pts = f.fire_points.len() as i128;
+            let sum_x: i128 = f.fire_points.iter().map(|p| p.x as i128).sum();
+            let sum_y: i128 = f.fire_points.iter().map(|p| p.y as i128).sum();
+            Some(FireItem {
+                rn,
+                thrower_idx: players.idx(f.steamid),
+                centroid_x: (sum_x / n_pts) as i64,
+                centroid_y: (sum_y / n_pts) as i64,
+                raw: f,
+                used: false,
+            })
+        })
+        .collect();
+
+    // Pass A: direct entity_id match
+    for g in out.iter_mut() {
+        if !matches!(g.grenade, GrenadeType::Molotov | GrenadeType::Incendiary) {
+            continue;
+        }
+        let Some(geid) = g.entity_id else {
+            continue;
+        };
+        let mut best_idx: Option<usize> = None;
+        let mut best_dt = i64::MAX;
+        for (idx, f) in fire_items.iter().enumerate() {
+            if f.used || f.rn != g.round_number || f.raw.entity_id != geid {
+                continue;
+            }
+            let dt = (f.raw.start_tick - g.effect_tick).abs();
+            if dt <= 96 && dt < best_dt {
+                best_dt = dt;
+                best_idx = Some(idx);
+            }
+        }
+        if let Some(idx) = best_idx {
+            fire_items[idx].used = true;
+            g.fire_points = Some(fire_items[idx].raw.fire_points.clone());
+        }
+    }
+
+    // Pass B: spatiotemporal fallback with centroid distance cap (512 game units)
+    const MAX_FIRE_DIST_SQ: i128 = 512 * 512;
+    for g in out.iter_mut() {
+        if !matches!(g.grenade, GrenadeType::Molotov | GrenadeType::Incendiary)
+            || g.fire_points.is_some()
+        {
+            continue;
+        }
+        let mut best_idx: Option<usize> = None;
+        let mut best_score: Option<(i64, i128)> = None;
+        for (idx, f) in fire_items.iter().enumerate() {
+            if f.used || f.rn != g.round_number {
+                continue;
+            }
+            if let Some(ti) = f.thrower_idx {
+                if ti != g.thrower_index {
+                    continue;
+                }
+            }
+            let dt = (f.raw.start_tick - g.effect_tick).abs();
+            if dt > 96 {
+                continue;
+            }
+            let dx = (f.centroid_x - g.effect_position.x) as i128;
+            let dy = (f.centroid_y - g.effect_position.y) as i128;
+            let d2 = dx * dx + dy * dy;
+            if d2 > MAX_FIRE_DIST_SQ {
+                continue;
+            }
+            let score = (dt, d2);
+            if best_score.is_none_or(|b| score < b) {
+                best_score = Some(score);
+                best_idx = Some(idx);
+            }
+        }
+        if let Some(idx) = best_idx {
+            fire_items[idx].used = true;
+            g.fire_points = Some(fire_items[idx].raw.fire_points.clone());
+        }
+    }
+
+    // Clear temporary entity_id for molotovs too
+    for g in out.iter_mut() {
+        g.entity_id = None;
+    }
+
+    out
+}
+
+#[derive(Debug, Clone)]
+pub struct WeaponSpanRaw {
+    pub entity_id: i64,
+    pub weapon: String,
+    pub prev_owner_steamid: Option<u64>,
+    pub start_tick: i64,
+    pub end_tick: i64,
+    pub start_x: i64,
+    pub start_y: i64,
+    pub start_z: i64,
+    pub end_x: i64,
+    pub end_y: i64,
+    pub end_z: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeaponSpanRow {
+    pub round_number: i64,
+    pub entity_id: i64,
+    pub weapon: String,
+    pub start_tick: i64,
+    pub end_tick: i64,
+    pub previous_owner_index: Option<usize>,
+    pub start_position: Pos3,
+    pub end_position: Pos3,
+}
+
+pub fn build_weapons(
+    spans: &[WeaponSpanRaw],
+    players: &PlayerDirectory,
+    round_model: &RoundModel,
+) -> Vec<WeaponSpanRow> {
+    let mut out = Vec::new();
+    for s in spans {
+        let Some(rn) = round_model.round_for_tick(s.start_tick) else {
+            continue;
+        };
+        let Some(window) = round_model.window_for_round(rn) else {
+            continue;
+        };
+        let Some(event_end) = round_model.event_end_tick(rn) else {
+            continue;
+        };
+        // Spans are already split at round_start / freeze_end boundaries during extraction;
+        // require both endpoints to lie within [freeze_end_tick, event_end] so start/end
+        // ticks and positions always come from the same real observations.
+        if s.start_tick < window.freeze_end_tick
+            || s.end_tick > event_end
+            || s.start_tick > s.end_tick
+        {
+            continue;
+        }
+        let start_tick = s.start_tick;
+        let end_tick = s.end_tick;
+        let Some(weapon) = normalize_weapon_name(Some(&s.weapon)) else {
+            continue;
+        };
+        if weapon == "c4" {
+            continue;
+        }
+        out.push(WeaponSpanRow {
+            round_number: rn,
+            entity_id: s.entity_id,
+            weapon,
+            start_tick,
+            end_tick,
+            previous_owner_index: players.idx(s.prev_owner_steamid),
+            start_position: Pos3 {
+                x: s.start_x,
+                y: s.start_y,
+                z: s.start_z,
+            },
+            end_position: Pos3 {
+                x: s.end_x,
+                y: s.end_y,
+                z: s.end_z,
+            },
+        });
+    }
+    out.sort_by_key(|w| (w.round_number, w.start_tick, w.entity_id));
     out
 }
 

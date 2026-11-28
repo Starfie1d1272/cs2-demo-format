@@ -4,7 +4,10 @@
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "const": "cs2-demo-format/3.0"
+      "enum": [
+        "cs2-demo-format/3.0",
+        "cs2-demo-format/3.1"
+      ]
     },
     "exporter": {
       "type": "object",
@@ -138,6 +141,10 @@
           "minLength": 1
         },
         "duels": {
+          "type": "string",
+          "minLength": 1
+        },
+        "weapons": {
           "type": "string",
           "minLength": 1
         }

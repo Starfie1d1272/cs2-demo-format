@@ -36,6 +36,7 @@ fn make_players() -> PlayerDirectory {
                     steam_id64: num.to_string(),
                     name: i.to_string(),
                     team_key: *t,
+                    crosshair_code: None,
                     steam_id_num: num,
                 }
             })
@@ -63,6 +64,7 @@ fn make_kill(killer: Option<usize>, victim: usize, tick: i64, round_number: i64)
         penetrated_objects: 0,
         killer_position: None,
         victim_position: Pos3 { x: 0, y: 0, z: 0 },
+        killer_blinded: None,
     }
 }
 
@@ -100,6 +102,8 @@ fn empty_raw(tickrate: i64) -> RawDemo {
         smoke_expires: Vec::new(),
         grenade_throws: Vec::new(),
         grenade_trajectories: Vec::new(),
+        inferno_fires: Vec::new(),
+        weapon_spans: Vec::new(),
         replay_cols: ReplayColumns::default(),
         replay_ticks: Vec::new(),
         duel_cols: DuelColumns::default(),
@@ -146,12 +150,14 @@ fn kills_after_round_end_before_next_start_are_kept_in_previous_round() {
             steam_id64: "76561198000000001".to_string(),
             name: "attacker".to_string(),
             team_key: TeamKey::TeamA,
+            crosshair_code: None,
             steam_id_num: 76561198000000001,
         },
         PlayerRow {
             steam_id64: "76561198000000002".to_string(),
             name: "victim".to_string(),
             team_key: TeamKey::TeamB,
+            crosshair_code: None,
             steam_id_num: 76561198000000002,
         },
     ]);
@@ -191,6 +197,7 @@ fn kills_after_round_end_before_next_start_are_kept_in_previous_round() {
         thrusmoke: false,
         noscope: false,
         penetrated: 0,
+        attackerblind: None,
         attacker_x: None,
         attacker_y: None,
         attacker_z: None,
@@ -239,12 +246,14 @@ fn round_restart_keeps_previous_result_and_excludes_abandoned_ticks() {
             steam_id64: "76561198000000001".to_string(),
             name: "attacker".to_string(),
             team_key: TeamKey::TeamA,
+            crosshair_code: None,
             steam_id_num: 76561198000000001,
         },
         PlayerRow {
             steam_id64: "76561198000000002".to_string(),
             name: "victim".to_string(),
             team_key: TeamKey::TeamB,
+            crosshair_code: None,
             steam_id_num: 76561198000000002,
         },
     ]);
@@ -419,6 +428,7 @@ fn builder_uses_demo_tickrate_and_sorts_parser_rows() {
         thrusmoke: false,
         noscope: false,
         penetrated: 0,
+        attackerblind: None,
         attacker_x: None,
         attacker_y: None,
         attacker_z: None,
@@ -566,6 +576,7 @@ fn replay_round_extends_to_sample_before_next_round_start() {
         steam_id64: "76561198000000001".to_string(),
         name: "p1".to_string(),
         team_key: TeamKey::TeamA,
+        crosshair_code: None,
         steam_id_num: 76561198000000001,
     }]);
     let model = RoundModel::new(
@@ -604,6 +615,7 @@ fn replay_marks_round_start_bomb_carrier_from_inventory() {
         steam_id64: "76561198000000001".to_string(),
         name: "p1".to_string(),
         team_key: TeamKey::TeamA,
+        crosshair_code: None,
         steam_id_num: 76561198000000001,
     }]);
     let model = RoundModel::new(
@@ -822,4 +834,265 @@ fn v3_mid_fixture_validates_strict() {
         .to_path_buf();
     let fixture = root.join("fixtures").join("v3-mid");
     assert!(validate_dir_fixture(&fixture, None, true).unwrap());
+}
+
+fn copy_v3_mid_to_temp() -> tempfile::TempDir {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let fixture = root.join("fixtures").join("v3-mid");
+    let tmp = tempfile::tempdir().unwrap();
+    for entry in std::fs::read_dir(&fixture).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            std::fs::copy(&path, tmp.path().join(path.file_name().unwrap())).unwrap();
+        }
+    }
+    tmp
+}
+
+#[test]
+fn validate_rejects_mismatched_31_optional_column_lengths_and_bad_weapon_span() {
+    // 1. replay.ammo length mismatch
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let p = tmp.path().join("replay.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        v["rounds"][0]["players"][0]["ammo"] = serde_json::json!([30, 29]);
+        std::fs::write(&p, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+
+    // 2. duels.flags length mismatch
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let p = tmp.path().join("duels.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        v["windows"][0]["players"][0]["flags"] = serde_json::json!([16]);
+        std::fs::write(&p, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+
+    // 3. shots.accuracyPenalty length mismatch
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let p = tmp.path().join("shots.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        v["tracks"][0]["accuracyPenalty"] = serde_json::json!([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
+            47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68,
+            69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
+            91, 92, 93, 94, 95, 96, 97, 98, 99, 100
+        ]);
+        std::fs::write(&p, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+
+    // 4. weapons.json startTick > endTick
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let mp = tmp.path().join("manifest.json");
+        let mut m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&mp).unwrap()).unwrap();
+        m["schemaVersion"] = serde_json::json!("cs2-demo-format/3.1");
+        m["files"]["weapons"] = serde_json::json!("weapons.json");
+        std::fs::write(&mp, serde_json::to_vec(&m).unwrap()).unwrap();
+
+        let rp: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join("rounds.json")).unwrap())
+                .unwrap();
+        let fz = rp[0]["freezeEndTick"].as_i64().unwrap();
+        std::fs::write(
+            tmp.path().join("weapons.json"),
+            serde_json::json!([{
+                "roundNumber": 1,
+                "entityId": 100,
+                "weapon": "ak47",
+                "startTick": fz + 50,
+                "endTick": fz + 10,
+                "previousOwnerIndex": 0,
+                "startPosition": { "x": 10, "y": 20, "z": 30 },
+                "endPosition": { "x": 10, "y": 20, "z": 30 }
+            }])
+            .to_string(),
+        )
+        .unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+}
+
+#[test]
+fn weapon_span_aggregator_and_round_clipping_rules() {
+    use cs2df::enums::TeamKey;
+    use cs2df::events::{build_weapons, PlayerDirectory, PlayerRow};
+    use cs2df::parse::WeaponSpanAggregator;
+    use cs2df::rounds::{RoundModel, RoundWindow};
+    use std::collections::HashMap;
+
+    // Round 1: start=100, freeze_end=150, end=300; Round 2: start=350, freeze_end=400, end=500.
+    let windows = vec![
+        RoundWindow {
+            round_number: 1,
+            start_tick: 100,
+            freeze_end_tick: 150,
+            end_tick: 300,
+            next_start_tick: Some(350),
+        },
+        RoundWindow {
+            round_number: 2,
+            start_tick: 350,
+            freeze_end_tick: 400,
+            end_tick: 500,
+            next_start_tick: None,
+        },
+    ];
+    let round_model = RoundModel::new(windows, HashMap::<(i64, TeamKey), _>::new());
+    let players = PlayerDirectory::new(vec![
+        PlayerRow {
+            steam_id64: "76561198000000001".into(),
+            name: "p1".into(),
+            team_key: TeamKey::TeamA,
+            crosshair_code: None,
+            steam_id_num: 76561198000000001,
+        },
+        PlayerRow {
+            steam_id64: "76561198000000002".into(),
+            name: "p2".into(),
+            team_key: TeamKey::TeamB,
+            crosshair_code: None,
+            steam_id_num: 76561198000000002,
+        },
+    ]);
+
+    // Boundaries match round_starts (100, 350), freeze_ends (150, 400), last_end+1 (501).
+    let mut agg = WeaponSpanAggregator::new(vec![100, 150, 350, 400, 501]);
+
+    // 1. Missing coordinates are skipped (never fall back to 0,0,0).
+    agg.push(
+        160,
+        42,
+        "weapon_ak47",
+        Some(76561198000000001),
+        [None, Some(10.0), Some(5.0)],
+    );
+    // 2. Contiguous ticks (<= 2 tick gap) with same owner merge.
+    agg.push(
+        161,
+        42,
+        "weapon_ak47",
+        Some(76561198000000001),
+        [Some(100.0), Some(200.0), Some(10.0)],
+    );
+    agg.push(
+        163,
+        42,
+        "weapon_ak47",
+        Some(76561198000000001),
+        [Some(105.0), Some(205.0), Some(10.0)],
+    );
+    // 3. Gap > 2 ticks (e.g. picked up and re-dropped 10 ticks later) forces split.
+    agg.push(
+        174,
+        42,
+        "weapon_ak47",
+        Some(76561198000000001),
+        [Some(150.0), Some(250.0), Some(12.0)],
+    );
+    // 4. previous_owner change forces split even on consecutive tick.
+    agg.push(
+        175,
+        42,
+        "weapon_ak47",
+        Some(76561198000000002),
+        [Some(155.0), Some(255.0), Some(12.0)],
+    );
+    // 5. Observations crossing round 1 -> round 2 freeze_end split cleanly so ticks & positions stay paired.
+    agg.push(
+        349,
+        77,
+        "weapon_awp",
+        Some(76561198000000001),
+        [Some(300.0), Some(400.0), Some(20.0)],
+    );
+    agg.push(
+        350,
+        77,
+        "weapon_awp",
+        Some(76561198000000001),
+        [Some(310.0), Some(410.0), Some(20.0)],
+    ); // freezetime R2 -> dropped
+    agg.push(
+        399,
+        77,
+        "weapon_awp",
+        Some(76561198000000001),
+        [Some(320.0), Some(420.0), Some(20.0)],
+    ); // freezetime R2 -> dropped
+    agg.push(
+        400,
+        77,
+        "weapon_awp",
+        Some(76561198000000001),
+        [Some(330.0), Some(430.0), Some(20.0)],
+    ); // live R2 start
+    agg.push(
+        401,
+        77,
+        "weapon_awp",
+        Some(76561198000000001),
+        [Some(335.0), Some(435.0), Some(20.0)],
+    ); // live R2 end
+
+    let raw = agg.finish();
+    let built = build_weapons(&raw, &players, &round_model);
+    assert_eq!(
+        built.len(),
+        5,
+        "expected 3 spans for eid=42 and 2 live spans for eid=77"
+    );
+
+    // eid=42 span 1: 161..=163
+    assert_eq!(built[0].round_number, 1);
+    assert_eq!(built[0].start_tick, 161);
+    assert_eq!(built[0].end_tick, 163);
+    assert_eq!(built[0].previous_owner_index, Some(0));
+    assert_eq!(
+        (built[0].start_position.x, built[0].end_position.x),
+        (100, 105)
+    );
+
+    // eid=42 span 2: 174..=174 (split by >2 tick gap)
+    assert_eq!(built[1].start_tick, 174);
+    assert_eq!(built[1].end_tick, 174);
+    assert_eq!(built[1].previous_owner_index, Some(0));
+
+    // eid=42 span 3: 175..=175 (split by previous_owner change)
+    assert_eq!(built[2].start_tick, 175);
+    assert_eq!(built[2].end_tick, 175);
+    assert_eq!(built[2].previous_owner_index, Some(1));
+
+    // eid=77 R1: 349..=349 (still inside R1 event_end=349)
+    assert_eq!(built[3].round_number, 1);
+    assert_eq!(built[3].entity_id, 77);
+    assert_eq!(built[3].start_tick, 349);
+    assert_eq!(built[3].end_tick, 349);
+    assert_eq!(built[3].start_position.x, 300);
+
+    // eid=77 R2: 400..=401 (freezetime ticks 350..=399 excluded; start_position matches tick 400)
+    assert_eq!(built[4].round_number, 2);
+    assert_eq!(built[4].entity_id, 77);
+    assert_eq!(built[4].start_tick, 400);
+    assert_eq!(built[4].end_tick, 401);
+    assert_eq!(
+        (built[4].start_position.x, built[4].end_position.x),
+        (330, 335)
+    );
 }

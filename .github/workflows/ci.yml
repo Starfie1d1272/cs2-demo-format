@@ -40,27 +40,7 @@ jobs:
 
       - run: pnpm validate:fixtures
 
-  python:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: "3.14"
-
-      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
-
-      - run: uv sync --dev --locked --no-config --default-index https://pypi.org/simple
-
-      - run: uv run --locked --no-config --default-index https://pypi.org/simple ruff format --check src tests ../tools
-
-      - run: uv run --locked --no-config --default-index https://pypi.org/simple ruff check src tests ../tools
-
-      - run: uv run --locked --no-config --default-index https://pypi.org/simple pytest
+      - run: pnpm test:parser
 
   rust:
     name: rust / lint & test
@@ -84,6 +64,7 @@ jobs:
       - name: validate fixtures/v3-mid with cs2df
         run: |
           cargo build --release -p cs2df
+          ./target/release/cs2df --version
           (cd fixtures/v3-mid && zip -q /tmp/v3-mid.zip *.json)
           ./target/release/cs2df validate /tmp/v3-mid.zip --strict
 
@@ -95,10 +76,13 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
+            ext: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-          - os: ubuntu-latest
+            ext: ".exe"
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            ext: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,3 +95,18 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
       - run: cargo build --release -p cs2df --target ${{ matrix.target }}
+
+      - name: binary smoke test (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          ./target/${{ matrix.target }}/release/cs2df --version
+          (cd fixtures/v3-mid && zip -q /tmp/v3-mid.zip *.json)
+          ./target/${{ matrix.target }}/release/cs2df validate /tmp/v3-mid.zip --strict
+
+      - name: binary smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./target/${{ matrix.target }}/release/cs2df.exe --version
+          Compress-Archive -Path fixtures/v3-mid/*.json -DestinationPath $env:TEMP/v3-mid.zip -Force
+          ./target/${{ matrix.target }}/release/cs2df.exe validate $env:TEMP/v3-mid.zip --strict

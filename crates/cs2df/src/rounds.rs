@@ -26,6 +26,7 @@ pub struct PlayerInfoRow {
     pub steamid: Option<u64>,
     pub name: Option<String>,
     pub team_num: Option<i64>,
+    pub crosshair_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -18,8 +18,10 @@
         "type": "string",
         "enum": [
           "plant_begin",
+          "plant_abort",
           "planted",
           "defuse_begin",
+          "defuse_abort",
           "defused",
           "exploded",
           "dropped",

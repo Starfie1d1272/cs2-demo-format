@@ -10,6 +10,7 @@ use memmap2::MmapOptions;
 use parser::first_pass::parser_settings::{rm_user_friendly_names, ParserInputs};
 use parser::first_pass::prop_controller::{
     ENTITY_ID_ID, GRENADE_TYPE_ID, GRENADE_X, GRENADE_Y, GRENADE_Z, STEAMID_ID, TICK_ID,
+    WEAPON_ENTITY_NAME_ID,
 };
 use parser::maps::FRIENDLY_NAMES_MAPPING;
 use parser::parse_demo::{DemoOutput, Parser, ParsingMode, HEADER_ENDS_AT_BYTE};
@@ -20,10 +21,14 @@ use parser::second_pass::variants::{PropColumn, VarVec, Variant};
 use crate::enums::{BombEventKind, GrenadeType};
 use crate::events::{
     round_f64, round_ties_even_i64, BlindRawRow, BombRawEvent, DeathRawRow, EconomyRawRow,
-    GrenadeDetonationRaw, GrenadeExpireRaw, GrenadeThrowRaw, HurtRawRow,
+    GrenadeDetonationRaw, GrenadeExpireRaw, GrenadeThrowRaw, HurtRawRow, InfernoFireRaw, Pos3,
+    WeaponSpanRaw,
 };
 use crate::rounds::{resolve_round_attempts, PlayerInfoRow, RoundMarkerRow, SideSampleRow};
-use crate::streams::{DuelColumns, FireRawRow, GrenadeTrajectoryRaw, ReplayColumns};
+use crate::streams::{
+    DuelColumns, FireRawRow, GrenadeTrajectoryRaw, ReplayColumns, FLAG_HAS_HELMET,
+    FLAG_IS_AIRBORNE, FLAG_IS_DUCKING, FLAG_IS_IN_RELOAD, FLAG_IS_SCOPED, FLAG_IS_WALKING,
+};
 
 static HUFFMAN_TABLE: OnceLock<Vec<(u8, u8)>> = OnceLock::new();
 
@@ -75,6 +80,8 @@ pub struct RawDemo {
     pub smoke_expires: Vec<GrenadeExpireRaw>,
     pub grenade_throws: Vec<GrenadeThrowRaw>,
     pub grenade_trajectories: Vec<GrenadeTrajectoryRaw>,
+    pub inferno_fires: Vec<InfernoFireRaw>,
+    pub weapon_spans: Vec<WeaponSpanRaw>,
     pub replay_cols: ReplayColumns,
     pub replay_ticks: Vec<i64>,
     pub duel_cols: DuelColumns,
@@ -109,6 +116,31 @@ fn run_parser(
     parse_ents: bool,
     parse_grenades: bool,
 ) -> Result<DemoOutput> {
+    run_parser_ex(
+        mmap,
+        player_props,
+        other_props,
+        wanted_events,
+        wanted_ticks,
+        parse_ents,
+        parse_grenades,
+        false,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_parser_ex(
+    mmap: &[u8],
+    player_props: &[&str],
+    other_props: &[&str],
+    wanted_events: &[&str],
+    wanted_ticks: &[i32],
+    parse_ents: bool,
+    parse_grenades: bool,
+    parse_weapons: bool,
+    vector_props_as_lists: bool,
+) -> Result<DemoOutput> {
     let mut p_props: Vec<String> = player_props.iter().map(|s| (*s).to_string()).collect();
     if parse_ents && !p_props.is_empty() {
         if !p_props.iter().any(|s| s == "tick") {
@@ -136,8 +168,8 @@ fn run_parser(
         parse_ents,
         parse_projectiles: parse_grenades,
         parse_grenades,
-        parse_weapons: false,
-        vector_props_as_lists: false,
+        parse_weapons,
+        vector_props_as_lists,
         only_header: false,
         only_convars: false,
         huffman_lookup_table: huffman(),
@@ -188,18 +220,24 @@ fn var_f64(v: Option<&Variant>) -> Option<f64> {
     }
 }
 
-fn var_bool(v: Option<&Variant>) -> bool {
-    match v {
-        Some(Variant::Bool(b)) => *b,
-        Some(Variant::I32(x)) => *x != 0,
-        Some(Variant::U32(x)) => *x != 0,
-        Some(Variant::U64(x)) => *x != 0,
-        Some(Variant::F32(x)) => x.is_finite() && *x != 0.0,
-        Some(Variant::String(s)) => {
-            matches!(s.trim().to_ascii_lowercase().as_str(), "1" | "true")
-        }
-        _ => false,
+fn var_bool_opt(v: Option<&Variant>) -> Option<bool> {
+    match v? {
+        Variant::Bool(b) => Some(*b),
+        Variant::I32(x) => Some(*x != 0),
+        Variant::U32(x) => Some(*x != 0),
+        Variant::U64(x) => Some(*x != 0),
+        Variant::F32(x) if x.is_finite() => Some(*x != 0.0),
+        Variant::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" => Some(true),
+            "0" | "false" => Some(false),
+            _ => None,
+        },
+        _ => None,
     }
+}
+
+fn var_bool(v: Option<&Variant>) -> bool {
+    var_bool_opt(v).unwrap_or(false)
 }
 
 fn var_str(v: Option<&Variant>) -> Option<String> {
@@ -354,17 +392,23 @@ fn col_f64(col: Option<&PropColumn>, i: usize) -> Option<f64> {
     }
 }
 
-fn col_bool(col: Option<&PropColumn>, i: usize) -> bool {
-    match col.and_then(|c| c.data.as_ref()) {
-        Some(VarVec::Bool(v)) => v.get(i).and_then(|x| *x).unwrap_or(false),
-        Some(VarVec::I32(v)) => v.get(i).and_then(|x| *x).unwrap_or(0) != 0,
-        Some(VarVec::U32(v)) => v.get(i).and_then(|x| *x).unwrap_or(0) != 0,
-        Some(VarVec::F32(v)) => v
+fn col_bool_opt(col: Option<&PropColumn>, i: usize) -> Option<bool> {
+    match col?.data.as_ref()? {
+        VarVec::Bool(v) => v.get(i).copied().flatten(),
+        VarVec::I32(v) => v.get(i).copied().flatten().map(|x| x != 0),
+        VarVec::U32(v) => v.get(i).copied().flatten().map(|x| x != 0),
+        VarVec::F32(v) => v
             .get(i)
-            .and_then(|x| *x)
-            .is_some_and(|x| x.is_finite() && x != 0.0),
-        _ => false,
+            .copied()
+            .flatten()
+            .filter(|x| x.is_finite())
+            .map(|x| x != 0.0),
+        _ => None,
     }
+}
+
+fn col_bool(col: Option<&PropColumn>, i: usize) -> bool {
+    col_bool_opt(col, i).unwrap_or(false)
 }
 
 fn col_str_ref(col: Option<&PropColumn>, i: usize) -> Option<&str> {
@@ -612,8 +656,22 @@ fn rebuild_blinds(mmap: &[u8], detonates: &[GameEvent]) -> Result<Vec<BlindRawRo
 fn extract_grenade_paths(
     mmap: &[u8],
     sample_ticks: &[i64],
-) -> Result<(Vec<GrenadeThrowRaw>, Vec<GrenadeTrajectoryRaw>)> {
-    let out = run_parser(mmap, &[], &[], &[], &[], true, true)?;
+) -> Result<(
+    Vec<GrenadeThrowRaw>,
+    Vec<GrenadeTrajectoryRaw>,
+    Vec<InfernoFireRaw>,
+)> {
+    let out = run_parser_ex(
+        mmap,
+        &["Grenade.m_firePositions", "Grenade.m_bFireIsBurning"],
+        &[],
+        &[],
+        &[],
+        true,
+        true,
+        false,
+        true,
+    )?;
     struct ProjPt {
         eid: i64,
         tick: i64,
@@ -632,11 +690,33 @@ fn extract_grenade_paths(
     let z_col = out.df.get(&GRENADE_Z);
     let n_rows = tick_col.map(col_len).unwrap_or(0);
 
+    let reader = ColReader::from_output(&out);
+    let fp_col = reader.get("m_firePositions");
+    let fb_col = reader.get("m_bFireIsBurning");
+
+    struct InfernoRowIdx {
+        eid: i64,
+        tick: i64,
+        row: usize,
+        steamid: Option<u64>,
+    }
+    let mut inferno_rows: Vec<InfernoRowIdx> = Vec::new();
     let mut pts: Vec<ProjPt> = Vec::with_capacity(n_rows);
     for i in 0..n_rows {
         let Some(gt) = col_str_ref(gt_col, i) else {
             continue;
         };
+        if gt == "CInferno" {
+            if let (Some(tick), Some(eid)) = (col_i64(tick_col, i), col_i64(eid_col, i)) {
+                inferno_rows.push(InfernoRowIdx {
+                    eid,
+                    tick,
+                    row: i,
+                    steamid: col_u64(sid_col, i),
+                });
+            }
+            continue;
+        }
         if !gt.ends_with("Projectile") {
             continue;
         }
@@ -662,8 +742,66 @@ fn extract_grenade_paths(
             steamid: col_u64(sid_col, i),
         });
     }
+    // Extract deduplicated burning firePoints per CInferno entity span
+    let mut inferno_fires = Vec::new();
+    if !inferno_rows.is_empty() {
+        inferno_rows.sort_by_key(|r| (r.eid, r.tick));
+        let mut s_start = 0usize;
+        for idx in 1..=inferno_rows.len() {
+            let split = idx == inferno_rows.len()
+                || inferno_rows[idx].eid != inferno_rows[idx - 1].eid
+                || (inferno_rows[idx].tick - inferno_rows[idx - 1].tick) > 64;
+            if split {
+                let seg = &inferno_rows[s_start..idx];
+                let mut seen_pts: BTreeSet<(i64, i64, i64)> = BTreeSet::new();
+                for r in seg {
+                    let fps = match fp_col.and_then(|c| c.data.as_ref()) {
+                        Some(VarVec::List(v)) => v.get(r.row).map(Vec::as_slice).unwrap_or(&[]),
+                        _ => &[],
+                    };
+                    let fbs = match fb_col.and_then(|c| c.data.as_ref()) {
+                        Some(VarVec::List(v)) => v.get(r.row).map(Vec::as_slice).unwrap_or(&[]),
+                        _ => &[],
+                    };
+                    for (j, fp) in fps.iter().enumerate() {
+                        let burning = matches!(fbs.get(j), Some(Variant::Bool(true)));
+                        if !burning {
+                            continue;
+                        }
+                        if let Variant::VecXYZ([x, y, z]) = fp {
+                            if x.is_finite()
+                                && y.is_finite()
+                                && z.is_finite()
+                                && (*x != 0.0 || *y != 0.0 || *z != 0.0)
+                            {
+                                seen_pts.insert((
+                                    round_ties_even_i64(*x as f64),
+                                    round_ties_even_i64(*y as f64),
+                                    round_ties_even_i64(*z as f64),
+                                ));
+                            }
+                        }
+                    }
+                }
+                if !seen_pts.is_empty() {
+                    inferno_fires.push(InfernoFireRaw {
+                        entity_id: seg[0].eid,
+                        start_tick: seg[0].tick,
+                        end_tick: seg.last().unwrap().tick,
+                        steamid: seg[0].steamid,
+                        fire_points: seen_pts
+                            .into_iter()
+                            .map(|(x, y, z)| Pos3 { x, y, z })
+                            .collect(),
+                    });
+                }
+                s_start = idx;
+            }
+        }
+    }
+
     if pts.is_empty() {
-        return Ok((Vec::new(), Vec::new()));
+        return Ok((Vec::new(), Vec::new(), inferno_fires));
     }
     pts.sort_by_key(|p| (p.eid, p.tick));
 
@@ -753,7 +891,189 @@ fn extract_grenade_paths(
         });
     }
 
-    Ok((throws, trajectories))
+    Ok((throws, trajectories, inferno_fires))
+}
+
+struct ActiveWeaponSpan {
+    weapon_id: usize,
+    prev_sid: Option<u64>,
+    bucket: usize,
+    start_tick: i64,
+    end_tick: i64,
+    start_x: i64,
+    start_y: i64,
+    start_z: i64,
+    end_x: i64,
+    end_y: i64,
+    end_z: i64,
+}
+
+/// Aggregates per-tick ground weapon observations into contiguous spans per entity_id,
+/// splitting on weapon change, previous_owner change, tick gaps > 2, or round boundaries.
+pub struct WeaponSpanAggregator {
+    boundaries: Vec<i64>,
+    weapon_names: Vec<String>,
+    weapon_idx_map: HashMap<String, usize>,
+    active_by_eid: HashMap<i64, ActiveWeaponSpan>,
+    spans: Vec<WeaponSpanRaw>,
+}
+
+impl WeaponSpanAggregator {
+    pub fn new(mut boundaries: Vec<i64>) -> Self {
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        Self {
+            boundaries,
+            weapon_names: Vec::new(),
+            weapon_idx_map: HashMap::new(),
+            active_by_eid: HashMap::new(),
+            spans: Vec::new(),
+        }
+    }
+
+    pub fn push(
+        &mut self,
+        tick: i64,
+        eid: i64,
+        weapon: &str,
+        prev_sid: Option<u64>,
+        pos: [Option<f64>; 3],
+    ) {
+        if weapon.is_empty() {
+            return;
+        }
+        let [Some(fx), Some(fy), Some(fz)] = pos else {
+            return;
+        };
+        if !(fx.is_finite() && fy.is_finite() && fz.is_finite()) {
+            return;
+        }
+        let ix = round_ties_even_i64(fx);
+        let iy = round_ties_even_i64(fy);
+        let iz = round_ties_even_i64(fz);
+        let bucket = self.boundaries.partition_point(|&b| b <= tick);
+
+        let weapon_id = if let Some(&id) = self.weapon_idx_map.get(weapon) {
+            id
+        } else {
+            let id = self.weapon_names.len();
+            self.weapon_names.push(weapon.to_string());
+            self.weapon_idx_map.insert(weapon.to_string(), id);
+            id
+        };
+
+        match self.active_by_eid.get_mut(&eid) {
+            Some(cur)
+                if cur.weapon_id == weapon_id
+                    && cur.prev_sid == prev_sid
+                    && cur.bucket == bucket
+                    && tick >= cur.end_tick
+                    && (tick - cur.end_tick) <= 2 =>
+            {
+                cur.end_tick = tick;
+                cur.end_x = ix;
+                cur.end_y = iy;
+                cur.end_z = iz;
+            }
+            mut slot => {
+                if let Some(prev) = slot.take() {
+                    self.spans.push(WeaponSpanRaw {
+                        entity_id: eid,
+                        weapon: self.weapon_names[prev.weapon_id].clone(),
+                        prev_owner_steamid: prev.prev_sid,
+                        start_tick: prev.start_tick,
+                        end_tick: prev.end_tick,
+                        start_x: prev.start_x,
+                        start_y: prev.start_y,
+                        start_z: prev.start_z,
+                        end_x: prev.end_x,
+                        end_y: prev.end_y,
+                        end_z: prev.end_z,
+                    });
+                }
+                self.active_by_eid.insert(
+                    eid,
+                    ActiveWeaponSpan {
+                        weapon_id,
+                        prev_sid,
+                        bucket,
+                        start_tick: tick,
+                        end_tick: tick,
+                        start_x: ix,
+                        start_y: iy,
+                        start_z: iz,
+                        end_x: ix,
+                        end_y: iy,
+                        end_z: iz,
+                    },
+                );
+            }
+        }
+    }
+
+    pub fn finish(mut self) -> Vec<WeaponSpanRaw> {
+        for (eid, prev) in self.active_by_eid {
+            self.spans.push(WeaponSpanRaw {
+                entity_id: eid,
+                weapon: self.weapon_names[prev.weapon_id].clone(),
+                prev_owner_steamid: prev.prev_sid,
+                start_tick: prev.start_tick,
+                end_tick: prev.end_tick,
+                start_x: prev.start_x,
+                start_y: prev.start_y,
+                start_z: prev.start_z,
+                end_x: prev.end_x,
+                end_y: prev.end_y,
+                end_z: prev.end_z,
+            });
+        }
+        self.spans
+    }
+}
+
+fn extract_weapon_spans(
+    mmap: &[u8],
+    round_starts: &[RoundMarkerRow],
+    round_freeze_ends: &[RoundMarkerRow],
+    round_ends: &[RoundMarkerRow],
+) -> Result<Vec<WeaponSpanRaw>> {
+    let out = run_parser_ex(mmap, &[], &[], &[], &[], true, false, true, false)?;
+    let tick_col = out.df.get(&TICK_ID);
+    let eid_col = out.df.get(&ENTITY_ID_ID);
+    let name_col = out.df.get(&WEAPON_ENTITY_NAME_ID);
+    let sid_col = out.df.get(&STEAMID_ID);
+    let x_col = out.df.get(&GRENADE_X);
+    let y_col = out.df.get(&GRENADE_Y);
+    let z_col = out.df.get(&GRENADE_Z);
+    let n_rows = tick_col.map(col_len).unwrap_or(0);
+    if n_rows == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut boundaries = Vec::with_capacity(round_starts.len() + round_freeze_ends.len() + 1);
+    boundaries.extend(round_starts.iter().map(|r| r.tick));
+    boundaries.extend(round_freeze_ends.iter().map(|r| r.tick));
+    if let Some(last_end) = round_ends.iter().map(|r| r.tick).max() {
+        boundaries.push(last_end + 1);
+    }
+
+    let mut agg = WeaponSpanAggregator::new(boundaries);
+    for i in 0..n_rows {
+        let (Some(tick), Some(eid)) = (col_i64(tick_col, i), col_i64(eid_col, i)) else {
+            continue;
+        };
+        let Some(w_str) = col_str_ref(name_col, i) else {
+            continue;
+        };
+        agg.push(
+            tick,
+            eid,
+            w_str,
+            col_u64(sid_col, i),
+            [col_f64(x_col, i), col_f64(y_col, i), col_f64(z_col, i)],
+        );
+    }
+    Ok(agg.finish())
 }
 
 pub fn parse_demo(
@@ -811,7 +1131,9 @@ pub fn parse_demo(
             "bomb_defused",
             "bomb_exploded",
             "bomb_beginplant",
+            "bomb_abortplant",
             "bomb_begindefuse",
+            "bomb_abortdefuse",
             "bomb_dropped",
             "bomb_pickup",
             "smokegrenade_detonate",
@@ -890,6 +1212,7 @@ pub fn parse_demo(
                             .or_else(|| event_field(&ev, "penetrated")),
                     )
                     .unwrap_or(0),
+                    attackerblind: var_bool_opt(event_field(&ev, "attackerblind")),
                     attacker_x: var_f64(event_field_ci(&ev, "attacker_X")),
                     attacker_y: var_f64(event_field_ci(&ev, "attacker_Y")),
                     attacker_z: var_f64(event_field_ci(&ev, "attacker_Z")),
@@ -922,7 +1245,9 @@ pub fn parse_demo(
             "bomb_defused" => bomb_events.push(to_bomb_row(&ev, BombEventKind::Defused)),
             "bomb_exploded" => bomb_events.push(to_bomb_row(&ev, BombEventKind::Exploded)),
             "bomb_beginplant" => bomb_events.push(to_bomb_row(&ev, BombEventKind::PlantBegin)),
+            "bomb_abortplant" => bomb_events.push(to_bomb_row(&ev, BombEventKind::PlantAbort)),
             "bomb_begindefuse" => bomb_events.push(to_bomb_row(&ev, BombEventKind::DefuseBegin)),
+            "bomb_abortdefuse" => bomb_events.push(to_bomb_row(&ev, BombEventKind::DefuseAbort)),
             "bomb_dropped" => bomb_events.push(to_bomb_row(&ev, BombEventKind::Dropped)),
             "bomb_pickup" => bomb_events.push(to_bomb_row(&ev, BombEventKind::PickedUp)),
             "smokegrenade_detonate" => {
@@ -1026,7 +1351,7 @@ pub fn parse_demo(
     }
     drop(flashbang_detonate_events);
 
-    // Pass 3: weapon_fire isolated with velocity_X/Y/Z
+    // Pass 3: weapon_fire isolated with velocity_X/Y/Z and 3.1 combat telemetry
     report("shots", 0.25);
     let st = Instant::now();
     let fires_out = run_parser(
@@ -1040,6 +1365,14 @@ pub fn parse_demo(
             "velocity_X",
             "velocity_Y",
             "velocity_Z",
+            "accuracy_penalty",
+            "fl_recoil_idx",
+            "active_weapon_ammo",
+            "is_scoped",
+            "is_walking",
+            "is_airborne",
+            "duck_amount",
+            "is_in_reload",
         ],
         &["total_rounds_played"],
         &["weapon_fire"],
@@ -1051,21 +1384,52 @@ pub fn parse_demo(
         .game_events
         .into_iter()
         .filter(|ev| ev.name == "weapon_fire")
-        .map(|ev| FireRawRow {
-            tick: ev.tick as i64,
-            total_rounds_played: var_i64(event_field(&ev, "total_rounds_played")).unwrap_or(0),
-            user_steamid: var_u64(
-                event_field(&ev, "user_steamid").or_else(|| event_field(&ev, "steamid")),
-            ),
-            weapon: var_str(event_field(&ev, "weapon")),
-            user_x: var_f64(event_field_ci(&ev, "user_X")),
-            user_y: var_f64(event_field_ci(&ev, "user_Y")),
-            user_z: var_f64(event_field_ci(&ev, "user_Z")),
-            user_yaw: var_f64(event_field(&ev, "user_yaw")),
-            user_pitch: var_f64(event_field(&ev, "user_pitch")),
-            velocity_x: var_f64(event_field_ci(&ev, "user_velocity_X")),
-            velocity_y: var_f64(event_field_ci(&ev, "user_velocity_Y")),
-            velocity_z: var_f64(event_field_ci(&ev, "user_velocity_Z")),
+        .map(|ev| {
+            let recoil = var_f64(event_field(&ev, "user_fl_recoil_idx")).map(round_ties_even_i64);
+            let scp = var_bool_opt(event_field(&ev, "user_is_scoped"));
+            let wlk = var_bool_opt(event_field(&ev, "user_is_walking"));
+            let air = var_bool_opt(event_field(&ev, "user_is_airborne"));
+            let dck = var_f64(event_field(&ev, "user_duck_amount"));
+            let rld = var_bool_opt(event_field(&ev, "user_is_in_reload"));
+            let has_any_flag =
+                scp.is_some() || wlk.is_some() || air.is_some() || dck.is_some() || rld.is_some();
+            let mut f = 0i64;
+            if scp == Some(true) {
+                f |= FLAG_IS_SCOPED;
+            }
+            if wlk == Some(true) {
+                f |= FLAG_IS_WALKING;
+            }
+            if air == Some(true) {
+                f |= FLAG_IS_AIRBORNE;
+            }
+            if dck.unwrap_or(0.0) >= 0.5 {
+                f |= FLAG_IS_DUCKING;
+            }
+            if rld == Some(true) {
+                f |= FLAG_IS_IN_RELOAD;
+            }
+            let flags = has_any_flag.then_some(f);
+            FireRawRow {
+                tick: ev.tick as i64,
+                total_rounds_played: var_i64(event_field(&ev, "total_rounds_played")).unwrap_or(0),
+                user_steamid: var_u64(
+                    event_field(&ev, "user_steamid").or_else(|| event_field(&ev, "steamid")),
+                ),
+                weapon: var_str(event_field(&ev, "weapon")),
+                user_x: var_f64(event_field_ci(&ev, "user_X")),
+                user_y: var_f64(event_field_ci(&ev, "user_Y")),
+                user_z: var_f64(event_field_ci(&ev, "user_Z")),
+                user_yaw: var_f64(event_field(&ev, "user_yaw")),
+                user_pitch: var_f64(event_field(&ev, "user_pitch")),
+                velocity_x: var_f64(event_field_ci(&ev, "user_velocity_X")),
+                velocity_y: var_f64(event_field_ci(&ev, "user_velocity_Y")),
+                velocity_z: var_f64(event_field_ci(&ev, "user_velocity_Z")),
+                accuracy_penalty: var_f64(event_field(&ev, "user_accuracy_penalty")),
+                recoil_idx: recoil,
+                ammo: var_i64(event_field(&ev, "user_active_weapon_ammo")),
+                flags,
+            }
         })
         .collect();
     record(&mut timings, "parse.shots", st);
@@ -1122,6 +1486,7 @@ pub fn parse_demo(
                 "armor",
                 "has_helmet",
                 "has_defuser",
+                "crosshair_code",
                 "inventory",
             ],
             &["CCSTeam.m_szClanTeamname", "CCSTeam.m_iTeamNum"],
@@ -1139,6 +1504,7 @@ pub fn parse_demo(
         let ar_c = r.get("armor");
         let hh_c = r.get("has_helmet");
         let hd_c = r.get("has_defuser");
+        let ch_c = r.get("crosshair_code");
         let inv_c = r.get("inventory");
         let team_num_c = r.get("CCSTeam.m_iTeamNum");
         let clan_c = r.get("CCSTeam.m_szClanTeamname");
@@ -1150,10 +1516,14 @@ pub fn parse_demo(
             let team_num = col_i64(tn_c, i);
 
             if tick == match_start_tick {
+                let ch_code = col_str(ch_c, i)
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
                 player_info.push(PlayerInfoRow {
                     steamid: sid,
                     name: col_str(name_c, i),
                     team_num,
+                    crosshair_code: ch_code,
                 });
                 if !seen_team_at_start {
                     if let (Some(tn), Some(cname)) = (col_i64(team_num_c, i), col_str(clan_c, i)) {
@@ -1227,6 +1597,13 @@ pub fn parse_demo(
                 "balance",
                 "current_equip_value",
                 "has_defuser",
+                "has_helmet",
+                "is_scoped",
+                "is_walking",
+                "is_airborne",
+                "duck_amount",
+                "is_in_reload",
+                "active_weapon_ammo",
                 "last_place_name",
                 "inventory",
             ],
@@ -1249,6 +1626,13 @@ pub fn parse_demo(
         let bal_c = r.get("balance");
         let eq_c = r.get("current_equip_value");
         let def_c = r.get("has_defuser");
+        let hel_c = r.get("has_helmet");
+        let scp_c = r.get("is_scoped");
+        let wlk_c = r.get("is_walking");
+        let air_c = r.get("is_airborne");
+        let dck_c = r.get("duck_amount");
+        let rld_c = r.get("is_in_reload");
+        let ammo_c = r.get("active_weapon_ammo");
         let pl_c = r.get("last_place_name");
         let inv_c = r.get("inventory");
 
@@ -1269,6 +1653,8 @@ pub fn parse_demo(
         replay_cols.place_codes.reserve(r.len);
         replay_cols.grenades.reserve(r.len);
         replay_cols.has_bomb.reserve(r.len);
+        replay_cols.flags_extra.reserve(r.len);
+        replay_cols.ammo.reserve(r.len);
 
         let mut weapon_cache: HashMap<String, i32> = HashMap::new();
         for i in 0..r.len {
@@ -1308,16 +1694,44 @@ pub fn parse_demo(
                 .unwrap_or(-1);
             replay_cols.place_codes.push(pcode);
 
+            let mut f_extra = 0i64;
+            if col_bool(hel_c, i) {
+                f_extra |= FLAG_HAS_HELMET;
+            }
+            if col_bool(scp_c, i) {
+                f_extra |= FLAG_IS_SCOPED;
+            }
+            if col_bool(wlk_c, i) {
+                f_extra |= FLAG_IS_WALKING;
+            }
+            if col_bool(air_c, i) {
+                f_extra |= FLAG_IS_AIRBORNE;
+            }
+            if col_f64(dck_c, i).unwrap_or(0.0) >= 0.5 {
+                f_extra |= FLAG_IS_DUCKING;
+            }
+            if col_bool(rld_c, i) {
+                f_extra |= FLAG_IS_IN_RELOAD;
+            }
+            replay_cols.flags_extra.push(f_extra);
+            replay_cols.ammo.push(col_i64(ammo_c, i).map(|a| a.max(0)));
             replay_cols.push_inventory(col_str_vec_ref(inv_c, i));
         }
     }
     record(&mut timings, "parse.replayGrid", st);
 
-    // Pass 6: grenade trajectories
-    report("grenade trajectories", 0.75);
+    // Pass 6: grenade trajectories + CInferno fire points
+    report("grenade trajectories", 0.72);
     let st = Instant::now();
-    let (grenade_throws, grenade_trajectories) = extract_grenade_paths(&mmap, &replay_ticks)?;
+    let (grenade_throws, grenade_trajectories, inferno_fires) =
+        extract_grenade_paths(&mmap, &replay_ticks)?;
     record(&mut timings, "parse.grenadeTrajectories", st);
+
+    // Pass 6b: ground weapons lifecycle
+    report("ground weapons", 0.79);
+    let st = Instant::now();
+    let weapon_spans = extract_weapon_spans(&mmap, &round_starts, &round_freeze_ends, &round_ends)?;
+    record(&mut timings, "parse.weapons", st);
 
     // Pass 7 (--research): duel windows directly into columnar DuelColumns
     let mut duel_cols = DuelColumns::default();
@@ -1357,6 +1771,11 @@ pub fn parse_demo(
                     "pitch",
                     "health",
                     "flash_duration",
+                    "is_scoped",
+                    "is_walking",
+                    "is_airborne",
+                    "duck_amount",
+                    "is_in_reload",
                 ],
                 &[],
                 &[],
@@ -1372,6 +1791,11 @@ pub fn parse_demo(
             let pitch_c = r.get("pitch");
             let hp_c = r.get("health");
             let fd_c = r.get("flash_duration");
+            let scp_c = r.get("is_scoped");
+            let wlk_c = r.get("is_walking");
+            let air_c = r.get("is_airborne");
+            let dck_c = r.get("duck_amount");
+            let rld_c = r.get("is_in_reload");
 
             duel_cols.ticks.reserve(r.len);
             duel_cols.steamids.reserve(r.len);
@@ -1382,6 +1806,7 @@ pub fn parse_demo(
             duel_cols.pitch.reserve(r.len);
             duel_cols.health.reserve(r.len);
             duel_cols.flash_duration.reserve(r.len);
+            duel_cols.flags.reserve(r.len);
 
             for i in 0..r.len {
                 duel_cols.ticks.push(col_i64(r.tick_col, i).unwrap_or(0));
@@ -1393,6 +1818,33 @@ pub fn parse_demo(
                 duel_cols.pitch.push(col_f32(pitch_c, i));
                 duel_cols.health.push(col_f32(hp_c, i));
                 duel_cols.flash_duration.push(col_f32(fd_c, i));
+                let scp = col_bool_opt(scp_c, i);
+                let wlk = col_bool_opt(wlk_c, i);
+                let air = col_bool_opt(air_c, i);
+                let dck = col_f64(dck_c, i);
+                let rld = col_bool_opt(rld_c, i);
+                let has_any = scp.is_some()
+                    || wlk.is_some()
+                    || air.is_some()
+                    || dck.is_some()
+                    || rld.is_some();
+                let mut f = 0i64;
+                if scp == Some(true) {
+                    f |= FLAG_IS_SCOPED;
+                }
+                if wlk == Some(true) {
+                    f |= FLAG_IS_WALKING;
+                }
+                if air == Some(true) {
+                    f |= FLAG_IS_AIRBORNE;
+                }
+                if dck.unwrap_or(0.0) >= 0.5 {
+                    f |= FLAG_IS_DUCKING;
+                }
+                if rld == Some(true) {
+                    f |= FLAG_IS_IN_RELOAD;
+                }
+                duel_cols.flags.push(has_any.then_some(f));
             }
         }
         record(&mut timings, "parse.duelWindows", st);
@@ -1422,6 +1874,8 @@ pub fn parse_demo(
         smoke_expires,
         grenade_throws,
         grenade_trajectories,
+        inferno_fires,
+        weapon_spans,
         replay_cols,
         replay_ticks,
         duel_cols,

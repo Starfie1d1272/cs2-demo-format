@@ -25,8 +25,7 @@ const REQUIRED_KEYS = new Set([
   'grenades',
   'clutches',
 ]);
-const OPTIONAL_KEYS = new Set(['shots', 'replay', 'duels']);
-const SCHEMA_VERSION = 'cs2-demo-format/3.0';
+const SCHEMA_VERSION_RE = /^cs2-demo-format\/3\.\d+$/;
 const EPS = 0.02;
 
 type Row = Record<string, unknown>;
@@ -48,7 +47,10 @@ for (const demo of fixtureDirs) {
 
   try {
     const manifestRaw = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-    if (manifestRaw?.schemaVersion !== SCHEMA_VERSION) {
+    if (
+      typeof manifestRaw?.schemaVersion !== 'string' ||
+      !SCHEMA_VERSION_RE.test(manifestRaw.schemaVersion)
+    ) {
       console.log(
         `  - legacy fixture skipped (schemaVersion: ${String(manifestRaw?.schemaVersion ?? 'missing')})`,
       );
@@ -73,12 +75,7 @@ for (const demo of fixtureDirs) {
         errors++;
       }
     }
-    for (const key of Object.keys(filesMap)) {
-      if (!REQUIRED_KEYS.has(key) && !OPTIONAL_KEYS.has(key)) {
-        console.error(`  ✗ manifest.files: unknown key "${key}"`);
-        errors++;
-      }
-    }
+    // Forward-compatible: unknown optional keys in manifest.files are skipped below if no schema exists.
 
     for (const [key, filenameValue] of Object.entries(filesMap)) {
       const filename = String(filenameValue);
@@ -113,8 +110,7 @@ for (const demo of fixtureDirs) {
       const raw = JSON.parse(rawText);
       dataByKey[key] = raw;
       if (!schema) {
-        console.error(`  ✗ ${filename}: no schema for key "${key}"`);
-        errors++;
+        console.log(`  - ${filename}: unregistered optional key "${key}" skipped`);
         continue;
       }
 

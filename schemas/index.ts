@@ -1,11 +1,11 @@
 /**
- * cs2-demo-format — Canonical Zod Schemas (v4.0.0)
+ * cs2-demo-format — Canonical Zod Schemas (v5.0.0)
  *
  * Strict export contract for CS2 demo ZIP packages.
  * `schemas/index.ts` is the single source of truth; JSON Schema files in
  * `spec/` are generated from these definitions.
  *
- * Schema version string: "cs2-demo-format/3.0".
+ * Schema version string: "cs2-demo-format/3.1" (validates 3.0 and 3.1).
  *
  * ── v3 core conventions ──────────────────────────────────────────────────────
  *
@@ -54,8 +54,10 @@ export const endReasonSchema = z.enum([
 ]);
 export const bombEventTypeSchema = z.enum([
   'plant_begin',
+  'plant_abort',
   'planted',
   'defuse_begin',
+  'defuse_abort',
   'defused',
   'exploded',
   'dropped',
@@ -114,7 +116,7 @@ const dictIndexArray = z.array(z.number().int().min(-1));
 
 export const manifestSchema = z
   .object({
-    schemaVersion: z.literal('cs2-demo-format/3.0'),
+    schemaVersion: z.enum(['cs2-demo-format/3.0', 'cs2-demo-format/3.1']),
     exporter: z
       .object({
         name: z.string().min(1),
@@ -157,6 +159,8 @@ export const manifestSchema = z
         // Full-tick combat-window stream for reaction-time research (optional;
         // produced by research-profile exports).
         duels: z.string().min(1).optional(),
+        /** Ground weapon lifecycle state-change events (optional; 3.1+). */
+        weapons: z.string().min(1).optional(),
       })
       .strict(),
   })
@@ -198,6 +202,8 @@ export const playerRowSchema = z
     steamId64: steamId64Schema,
     name: z.string().min(1),
     teamKey: teamKeySchema,
+    /** Player crosshair share code (CSGO-...); optional in 3.0, populated in 3.1+. */
+    crosshairCode: nullableString.optional(),
   })
   .strict();
 export const playersSchema = z.array(playerRowSchema);
@@ -331,6 +337,8 @@ export const killRowSchema = z
     penetratedObjects: nonNegInt,
     killerPosition: nullableVec3,
     victimPosition: vec3Schema,
+    /** True when the killer was flash-blinded at the moment of the kill (3.1+). */
+    killerBlinded: z.boolean().optional(),
   })
   .strict();
 export const killsSchema = z.array(killRowSchema);
@@ -424,6 +432,8 @@ export const grenadeRowSchema = z
     throwerIndex: playerIndexSchema,
     throwPosition: vec3Schema,
     effectPosition: vec3Schema,
+    /** Deduplicated integer world points where CInferno fire burned (molotov/incendiary, 3.1+). */
+    firePoints: z.array(vec3Schema).optional(),
   })
   .strict();
 export const grenadesSchema = z.array(grenadeRowSchema);
@@ -455,6 +465,14 @@ export const shotTrackSchema = z
     /** delta; view angles in degrees × angleScale */
     yaw: deltaIntArray,
     pitch: deltaIntArray,
+    /** plain; weapon accuracy penalty × 1000 (3.1+) */
+    accuracyPenalty: intArray.optional(),
+    /** plain; weapon recoil index (3.1+) */
+    recoilIdx: intArray.optional(),
+    /** plain; active weapon magazine ammo count (3.1+) */
+    ammo: intArray.optional(),
+    /** plain bitfield; shooter posture flags (see FLAG_* constants, 3.1+) */
+    flags: intArray.optional(),
   })
   .strict();
 export type ShotTrack = z.infer<typeof shotTrackSchema>;
@@ -513,10 +531,12 @@ export const replayPlayerTrackSchema = z
     place: dictIndexArray,
     /** plain; remaining flash-blind duration in tenths of a second (0–60) */
     flash: intArray,
-    /** plain bitfield: 1 = alive, 2 = hasBomb, 4 = hasDefuseKit */
+    /** plain bitfield: 1=alive, 2=hasBomb, 4=hasDefuseKit, 8=hasHelmet, 16=isScoped, 32=isWalking, 64=isAirborne, 128=isDucking, 256=isInReload */
     flags: intArray,
     /** plain; held grenade inventory for each frame. Empty array = none/unknown. */
     grenades: z.array(z.array(grenadeTypeSchema)).optional().default([]),
+    /** plain; active weapon magazine ammo count per frame (3.1+). */
+    ammo: intArray.optional(),
   })
   .strict();
 export type ReplayPlayerTrack = z.infer<typeof replayPlayerTrackSchema>;
@@ -605,6 +625,8 @@ export const duelPlayerTrackSchema = z
     hp: intArray,
     /** plain; remaining flash-blind duration in tenths of a second (0–60) */
     flash: intArray,
+    /** plain bitfield; combat posture flags (see FLAG_* constants, 3.1+) */
+    flags: intArray.optional(),
   })
   .strict();
 export type DuelPlayerTrack = z.infer<typeof duelPlayerTrackSchema>;
@@ -642,6 +664,23 @@ export type Duels = z.infer<typeof duelsSchema>;
 
 // ── All schemas by manifest file key ─────────────────────────────────────────
 
+// ── weapons.json (ground weapon observation spans, 3.1+) ──────────────────
+
+export const weaponSpanRowSchema = z
+  .object({
+    roundNumber: positiveInt,
+    entityId: nonNegInt,
+    weapon: weaponString,
+    startTick: positiveInt,
+    endTick: positiveInt,
+    previousOwnerIndex: nullablePlayerIndex,
+    startPosition: vec3Schema,
+    endPosition: vec3Schema,
+  })
+  .strict();
+export const weaponsSchema = z.array(weaponSpanRowSchema);
+export type WeaponSpanRow = z.infer<typeof weaponSpanRowSchema>;
+
 export const SCHEMAS_BY_KEY = {
   match: matchSchema,
   players: playersSchema,
@@ -657,6 +696,7 @@ export const SCHEMAS_BY_KEY = {
   shots: shotsSchema,
   replay: replaySchema,
   duels: duelsSchema,
+  weapons: weaponsSchema,
 } as const;
 
 /** @deprecated Use SCHEMAS_BY_KEY instead. */
@@ -675,7 +715,13 @@ export function decodeDelta(deltas: readonly number[]): number[] {
   return out;
 }
 
-/** Replay/duels flags bit values. */
+/** Replay/duels/shots flags bit values. */
 export const FLAG_ALIVE = 1;
 export const FLAG_HAS_BOMB = 2;
 export const FLAG_HAS_DEFUSE_KIT = 4;
+export const FLAG_HAS_HELMET = 8;
+export const FLAG_IS_SCOPED = 16;
+export const FLAG_IS_WALKING = 32;
+export const FLAG_IS_AIRBORNE = 64;
+export const FLAG_IS_DUCKING = 128;
+export const FLAG_IS_IN_RELOAD = 256;

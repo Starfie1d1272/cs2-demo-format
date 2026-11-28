@@ -23,7 +23,7 @@ const REQUIRED_KEYS: [&str; 11] = [
     "rounds",
 ];
 
-const OPTIONAL_KEYS: [&str; 3] = ["duels", "replay", "shots"];
+const OPTIONAL_KEYS: [&str; 4] = ["duels", "replay", "shots", "weapons"];
 
 const REPLAY_COLS: [&str; 13] = [
     "x",
@@ -40,11 +40,13 @@ const REPLAY_COLS: [&str; 13] = [
     "flash",
     "flags",
 ];
-const REPLAY_OPTIONAL_FRAME_COLS: [&str; 1] = ["grenades"];
+const REPLAY_OPTIONAL_FRAME_COLS: [&str; 2] = ["grenades", "ammo"];
 const DUEL_COLS: [&str; 7] = ["x", "y", "z", "yaw", "pitch", "hp", "flash"];
+const DUEL_OPTIONAL_COLS: [&str; 1] = ["flags"];
 const SHOT_COLS: [&str; 10] = [
     "tick", "weapon", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch",
 ];
+const SHOT_OPTIONAL_COLS: [&str; 4] = ["accuracyPenalty", "recoilIdx", "ammo", "flags"];
 
 fn embedded_schema_str(key: &str) -> Option<&'static str> {
     match key {
@@ -63,6 +65,7 @@ fn embedded_schema_str(key: &str) -> Option<&'static str> {
         "shots" => Some(include_str!("../../../spec/shots.schema.json")),
         "replay" => Some(include_str!("../../../spec/replay.schema.json")),
         "duels" => Some(include_str!("../../../spec/duels.schema.json")),
+        "weapons" => Some(include_str!("../../../spec/weapons.schema.json")),
         _ => None,
     }
 }
@@ -150,7 +153,10 @@ pub fn validate_zip(zip_path: &Path, spec_dir: Option<&Path>, strict: bool) -> R
         .get("schemaVersion")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    if schema_version != "cs2-demo-format/3.0" {
+    if !matches!(
+        schema_version,
+        "cs2-demo-format/3.0" | "cs2-demo-format/3.1"
+    ) {
         push_err(
             &mut errors,
             &format!("manifest.json: unsupported schemaVersion '{schema_version}'"),
@@ -335,6 +341,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
     let bombs = as_slice(data.get("bombs"));
     let grenades = as_slice(data.get("grenades"));
     let clutches = as_slice(data.get("clutches"));
+    let weapons = as_slice(data.get("weapons"));
     let shots = data.get("shots").and_then(|v| v.as_object());
     let replay = data.get("replay").and_then(|v| v.as_object());
     let duels = data.get("duels").and_then(|v| v.as_object());
@@ -456,6 +463,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
         ("bombs", bombs),
         ("grenades", grenades),
         ("clutches", clutches),
+        ("weapons", weapons),
         ("player-economies", economies),
     ] {
         check_event_rounds(name, rows, &round_set, errors);
@@ -465,6 +473,23 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
     check_tick_windows("damages", damages, &rounds_by_number, &["tick"], errors);
     check_tick_windows("blinds", blinds, &rounds_by_number, &["tick"], errors);
     check_tick_windows("bombs", bombs, &rounds_by_number, &["tick"], errors);
+    check_tick_windows(
+        "weapons",
+        weapons,
+        &rounds_by_number,
+        &["startTick", "endTick"],
+        errors,
+    );
+    for (wi, w) in weapons.iter().enumerate() {
+        let st = w.get("startTick").and_then(|v| v.as_i64()).unwrap_or(0);
+        let et = w.get("endTick").and_then(|v| v.as_i64()).unwrap_or(0);
+        if st > et {
+            push_err(
+                errors,
+                &format!("weapons.json[{wi}]: startTick ({st}) > endTick ({et})"),
+            );
+        }
+    }
     check_tick_windows(
         "grenades",
         grenades,
@@ -497,6 +522,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
             ["flasherIndex", "flashedIndex"].as_slice(),
         ),
         ("bombs", bombs, ["actorIndex"].as_slice()),
+        ("weapons", weapons, ["previousOwnerIndex"].as_slice()),
         ("grenades", grenades, ["throwerIndex"].as_slice()),
         ("clutches", clutches, ["clutcherIndex"].as_slice()),
         ("player-economies", economies, ["playerIndex"].as_slice()),
@@ -766,6 +792,24 @@ fn check_shots_stream(
         if lengths.len() > 1 {
             push_err(errors, &format!("{label}: column lengths differ"));
             continue;
+        }
+        let expected_len = t
+            .get("tick")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        for c in SHOT_OPTIONAL_COLS {
+            if let Some(arr) = t.get(c).and_then(|v| v.as_array()) {
+                if arr.len() != expected_len {
+                    push_err(
+                        errors,
+                        &format!(
+                            "{label}: optional column {c} length {} != tick length {expected_len}",
+                            arr.len()
+                        ),
+                    );
+                }
+            }
         }
         if let Some(ws) = t.get("weapon").and_then(|v| v.as_array()) {
             for w in ws {
@@ -1050,14 +1094,21 @@ fn check_duels_stream(
         }
         if let Some(players) = w.get("players").and_then(|v| v.as_array()) {
             for (pi, track) in players.iter().enumerate() {
-                check_track_frames(
-                    &format!("{label} players[{pi}]"),
-                    track,
-                    &DUEL_COLS,
-                    fc,
-                    n_players,
-                    errors,
-                );
+                let tlabel = format!("{label} players[{pi}]");
+                check_track_frames(&tlabel, track, &DUEL_COLS, fc, n_players, errors);
+                for c in DUEL_OPTIONAL_COLS {
+                    if let Some(arr) = track.get(c).and_then(|v| v.as_array()) {
+                        if arr.len() != fc {
+                            push_err(
+                                errors,
+                                &format!(
+                                    "{tlabel}: optional column {c} length {} != frameCount {fc}",
+                                    arr.len()
+                                ),
+                            );
+                        }
+                    }
+                }
             }
         }
     }

@@ -88,6 +88,7 @@ Optional: `shots`, `replay`, `duels`。
 | `steamId64` | string (17 位) | |
 | `name` | string | |
 | `teamKey` | `"teamA"` 或 `"teamB"` | |
+| `crosshairCode` | string 或 null（可选，3.1+） | 准星分享码（如 `CSGO-...`） |
 
 **行序是规范性的**——行号即全包通用的 `playerIndex`。建议按 teamKey 再 steamId64 排序以保证确定性。
 
@@ -198,6 +199,7 @@ Tick order: `startTick < freezeEndTick ≤ endTick`.
 | `penetratedObjects` | integer ≥ 0 | |
 | `killerPosition` | vec3 或 null | 整数坐标 |
 | `victimPosition` | vec3 | 整数坐标 |
+| `killerBlinded` | boolean（可选，3.1+） | 击杀者当时是否处于致盲状态（`attackerblind`）；原始事件缺失该字段时省略 |
 
 参考导出器按 `(roundNumber, tick)` 稳定排序击杀；同 tick 保留源事件顺序。
 补枪要求前后两次均为敌方击杀、发生在同一回合，当前死者是前一次击杀者，
@@ -253,7 +255,7 @@ v3 移除: `victimHealthAfter` (= before − healthDamage)、`victimArmorBefore`
 | `actorIndex` | integer 或 null | 执行者；非玩家事件为 null |
 | `position` | vec3 | 整数坐标 |
 
-Bomb types: `plant_begin` / `planted` / `defuse_begin` / `defused` / `exploded` / `dropped` / `picked_up`.
+Bomb types: `plant_begin` / `plant_abort` (3.1+) / `planted` / `defuse_begin` / `defuse_abort` (3.1+) / `defused` / `exploded` / `dropped` / `picked_up`.
 
 v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 
@@ -272,6 +274,7 @@ v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 | `throwerIndex` | integer ≥ 0 | |
 | `throwPosition` | vec3 | 投掷者位置（整数坐标） |
 | `effectPosition` | vec3 | 生效位置（整数坐标） |
+| `firePoints` | vec3[]（可选，3.1+） | 该燃烧弹整个生命周期内曾被观测到处于燃烧状态（`m_bFireIsBurning == true`）的去重整数世界坐标集合 |
 
 ---
 
@@ -302,6 +305,10 @@ v3 移除: `siteId`（per-map 实体索引，与 site 冗余）。
 | `tracks[].x` / `y` / `z` | delta；开枪者位置 |
 | `tracks[].vx` / `vy` / `vz` | 速度（非 delta，帧间无相关性） |
 | `tracks[].yaw` / `pitch` | delta；视角角度 × angleScale |
+| `tracks[].accuracyPenalty` | plain（可选，3.1+）；精度惩罚 × 1000 |
+| `tracks[].recoilIdx` | plain（可选，3.1+）；后坐力索引 |
+| `tracks[].ammo` | plain（可选，3.1+）；当前弹匣子弹数 |
+| `tracks[].flags` | plain（可选，3.1+）；开枪瞬间姿态位掩码（见 `FLAG_*`） |
 
 同一 track 内所有数组等长。
 
@@ -336,8 +343,9 @@ Replay track 从本回合 `freezeEndTick` 开始；非最终回合延伸到下�
 | `weapon` | plain | weaponDict 索引；-1 = 无 |
 | `place` | plain | placeDict 索引（CS2 callout 名）；-1 = 无名区域 |
 | `flash` | plain | 剩余致盲时长，0.1 秒单位（0–60） |
-| `flags` | plain | 位字段：1=alive, 2=hasBomb, 4=hasDefuseKit |
+| `flags` | plain | 位字段：`1=alive`, `2=hasBomb`, `4=hasDefuseKit`, `8=hasHelmet`, `16=isScoped`, `32=isWalking`, `64=isAirborne`, `128=isDucking`（语义为 `duck_amount >= 0.5`）, `256=isInReload`（高位 8–256 自 `cs2-demo-format/3.1` 起填充） |
 | `grenades` | plain | 每帧当前持有道具类型数组；空数组 = 无或未知；旧 v3 导出可缺省 |
+| `ammo` | plain（可选，3.1+） | 每帧当前持枪弹匣子弹数（`active_weapon_ammo`）；无有效原始采样时省略 |
 
 **weaponDict / placeDict**：全局字符串字典，存于 replay.json 顶层。
 
@@ -371,6 +379,7 @@ Replay track 从本回合 `freezeEndTick` 开始；非最终回合延伸到下�
 | `yaw` / `pitch` | delta | 视角 |
 | `hp` | plain | 血量 |
 | `flash` | plain | 致盲时长 (0.1s) |
+| `flags` | plain（可选，3.1+） | 战斗姿态位掩码（`16=isScoped`, `32=isWalking`, `64=isAirborne`, `128=isDucking`, `256=isInReload`） |
 
 | Anchor 字段 | 说明 |
 |---|---|
@@ -381,6 +390,23 @@ Replay track 从本回合 `freezeEndTick` 开始；非最终回合延伸到下�
 **反应时间分析**：结合满 tick 位置+视角 + shots.json 的精确开枪 tick，可计算：
 视觉 onset（敌人进入视角锥的时刻）→ 首次开枪的延迟。
 用 `flash` 列排除被闪样本。
+
+---
+
+## weapons.json（地面武器观测区间，可选，3.1+）
+
+忠实记录 `parse_weapons()` 观测到的地面武器存在区间（不猜测消失原因，不因武器滑动切分伪事件）。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `roundNumber` | integer ≥ 1 | |
+| `entityId` | integer ≥ 0 | 武器实体 ID（跨回合可复用，结合 `roundNumber` 与 `startTick` 区分） |
+| `weapon` | string | 规范化武器名 |
+| `startTick` | integer ≥ 1 | 该区间首次在地面被观测到的 tick（裁剪至回合窗口内） |
+| `endTick` | integer ≥ 1 | 该区间最后在地面被观测到的 tick（`startTick <= endTick`） |
+| `previousOwnerIndex` | integer 或 null | 上一任持有者（`m_hPrevOwner`）；未知为 null |
+| `startPosition` | vec3 | 区间起点地面整数坐标 |
+| `endPosition` | vec3 | 区间终点地面整数坐标 |
 
 ---
 
