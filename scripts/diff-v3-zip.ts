@@ -269,7 +269,12 @@ function diffValues(
   }
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) {
-      recordDiff(buckets, `${path}.length`, `${a.length} !== ${b.length}`, Math.abs(a.length - b.length));
+      recordDiff(
+        buckets,
+        `${path}.length`,
+        `${a.length} !== ${b.length}`,
+        Math.abs(a.length - b.length),
+      );
       return;
     }
     for (let i = 0; i < a.length; i++) {
@@ -336,7 +341,9 @@ async function main(): Promise<void> {
     for (const bucket of buckets.values()) fileDiffs += bucket.count;
     totalDiffs += fileDiffs;
     console.log(`  ✗ ${name}: ${fileDiffs} diff(s) across ${buckets.size} field(s)`);
-    for (const [fieldPath, bucket] of Array.from(buckets.entries()).sort((x, y) => x[0].localeCompare(y[0]))) {
+    for (const [fieldPath, bucket] of Array.from(buckets.entries()).sort((x, y) =>
+      x[0].localeCompare(y[0]),
+    )) {
       const maxStr = bucket.maxAbsDiff !== null ? ` (maxAbsDiff=${bucket.maxAbsDiff})` : '';
       console.log(`      ${fieldPath}: ${bucket.count}${maxStr}`);
       for (const s of bucket.samples) {
@@ -348,9 +355,7 @@ async function main(): Promise<void> {
   // manifest (ignoring exportedAt, exporter, parser; in 3.0-vs-3.1 also schemaVersion and files.weapons)
   const normManifest = (m: JsonMap | undefined) => {
     if (!m) return null;
-    const files = v30VsV31
-      ? omitKeys((m.files as JsonMap) ?? {}, new Set(['weapons']))
-      : m.files;
+    const files = v30VsV31 ? omitKeys((m.files as JsonMap) ?? {}, new Set(['weapons'])) : m.files;
     return {
       schemaVersion: v30VsV31 ? 'cs2-demo-format/3.x' : m.schemaVersion,
       demo: m.demo,
@@ -363,12 +368,12 @@ async function main(): Promise<void> {
   const normPlayers = (rows: PlayerRow[]) =>
     rows
       .map((p) => (v30VsV31 ? omitKeys(p as unknown as JsonMap, new Set(['crosshairCode'])) : p))
-      .sort((a, b) => String((a as JsonMap).steamId64).localeCompare(String((b as JsonMap).steamId64)));
+      .sort((a, b) =>
+        String((a as JsonMap).steamId64).localeCompare(String((b as JsonMap).steamId64)),
+      );
 
   const filterBombs = (rows: JsonMap[]) =>
-    v30VsV31
-      ? rows.filter((r) => r.type !== 'plant_abort' && r.type !== 'defuse_abort')
-      : rows;
+    v30VsV31 ? rows.filter((r) => r.type !== 'plant_abort' && r.type !== 'defuse_abort') : rows;
 
   check('manifest.json', normManifest(aManifest), normManifest(bManifest));
   check('match.json', aFiles['match.json'], bFiles['match.json']);
