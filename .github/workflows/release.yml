@@ -82,6 +82,7 @@ jobs:
       - name: Generate SHA256SUMS.txt & publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           cd artifacts
           sha256sum cs2df-v* > SHA256SUMS.txt

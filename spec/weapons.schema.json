@@ -9,19 +9,6 @@
         "minimum": 1,
         "maximum": 9007199254740991
       },
-      "tick": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 9007199254740991
-      },
-      "type": {
-        "type": "string",
-        "enum": [
-          "dropped",
-          "picked_up",
-          "round_end"
-        ]
-      },
       "entityId": {
         "type": "integer",
         "minimum": 0,
@@ -31,7 +18,17 @@
         "type": "string",
         "minLength": 1
       },
-      "actorIndex": {
+      "startTick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "endTick": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "previousOwnerIndex": {
         "anyOf": [
           {
             "type": "integer",
@@ -43,7 +40,33 @@
           }
         ]
       },
-      "position": {
+      "startPosition": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "y": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "z": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "z"
+        ],
+        "additionalProperties": false
+      },
+      "endPosition": {
         "type": "object",
         "properties": {
           "x": {
@@ -72,12 +95,13 @@
     },
     "required": [
       "roundNumber",
-      "tick",
-      "type",
       "entityId",
       "weapon",
-      "actorIndex",
-      "position"
+      "startTick",
+      "endTick",
+      "previousOwnerIndex",
+      "startPosition",
+      "endPosition"
     ],
     "additionalProperties": false
   }

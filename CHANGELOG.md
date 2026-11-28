@@ -20,7 +20,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semver](htt
   - `duels.json`：新增可选 `flags` 战斗姿态位掩码列。
   - `shots.json`：新增可选 `aimPunchX`、`aimPunchY`、`accuracyPenalty`、`recoilIdx`、`ammo`、`flags` 列。
   - `grenades.json`：为燃烧弹/燃烧瓶（`CInferno`）新增可选 `firePoints`（去重整数世界坐标点集）。
-  - `weapons.json`：新增可选地面武器生命周期状态变更事件文件（`dropped` / `picked_up` / `round_end`）。
+  - `weapons.json`：新增可选地面武器观测区间文件（记录 `roundNumber`、`entityId`、`weapon`、`startTick`、`endTick`、`previousOwnerIndex`、`startPosition`、`endPosition`）。
 - **TypeScript 消费端 `3.x` 前向兼容**：`parser/index.ts` 支持 `cs2-demo-format/3.x`，递归放宽消费端校验以忽略未来小版本新增的可选字段，并跳过未注册的 `manifest.files` 可选文件键。
 
 ## 4.0.0 — 2026-11-28

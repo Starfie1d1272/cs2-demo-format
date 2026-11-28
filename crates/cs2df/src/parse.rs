@@ -234,18 +234,24 @@ fn var_f64(v: Option<&Variant>) -> Option<f64> {
     }
 }
 
-fn var_bool(v: Option<&Variant>) -> bool {
-    match v {
-        Some(Variant::Bool(b)) => *b,
-        Some(Variant::I32(x)) => *x != 0,
-        Some(Variant::U32(x)) => *x != 0,
-        Some(Variant::U64(x)) => *x != 0,
-        Some(Variant::F32(x)) => x.is_finite() && *x != 0.0,
-        Some(Variant::String(s)) => {
-            matches!(s.trim().to_ascii_lowercase().as_str(), "1" | "true")
-        }
-        _ => false,
+fn var_bool_opt(v: Option<&Variant>) -> Option<bool> {
+    match v? {
+        Variant::Bool(b) => Some(*b),
+        Variant::I32(x) => Some(*x != 0),
+        Variant::U32(x) => Some(*x != 0),
+        Variant::U64(x) => Some(*x != 0),
+        Variant::F32(x) if x.is_finite() => Some(*x != 0.0),
+        Variant::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" => Some(true),
+            "0" | "false" => Some(false),
+            _ => None,
+        },
+        _ => None,
     }
+}
+
+fn var_bool(v: Option<&Variant>) -> bool {
+    var_bool_opt(v).unwrap_or(false)
 }
 
 fn var_str(v: Option<&Variant>) -> Option<String> {
@@ -400,17 +406,23 @@ fn col_f64(col: Option<&PropColumn>, i: usize) -> Option<f64> {
     }
 }
 
-fn col_bool(col: Option<&PropColumn>, i: usize) -> bool {
-    match col.and_then(|c| c.data.as_ref()) {
-        Some(VarVec::Bool(v)) => v.get(i).and_then(|x| *x).unwrap_or(false),
-        Some(VarVec::I32(v)) => v.get(i).and_then(|x| *x).unwrap_or(0) != 0,
-        Some(VarVec::U32(v)) => v.get(i).and_then(|x| *x).unwrap_or(0) != 0,
-        Some(VarVec::F32(v)) => v
+fn col_bool_opt(col: Option<&PropColumn>, i: usize) -> Option<bool> {
+    match col?.data.as_ref()? {
+        VarVec::Bool(v) => v.get(i).copied().flatten(),
+        VarVec::I32(v) => v.get(i).copied().flatten().map(|x| x != 0),
+        VarVec::U32(v) => v.get(i).copied().flatten().map(|x| x != 0),
+        VarVec::F32(v) => v
             .get(i)
-            .and_then(|x| *x)
-            .is_some_and(|x| x.is_finite() && x != 0.0),
-        _ => false,
+            .copied()
+            .flatten()
+            .filter(|x| x.is_finite())
+            .map(|x| x != 0.0),
+        _ => None,
     }
+}
+
+fn col_bool(col: Option<&PropColumn>, i: usize) -> bool {
+    col_bool_opt(col, i).unwrap_or(false)
 }
 
 fn col_str_ref(col: Option<&PropColumn>, i: usize) -> Option<&str> {
@@ -766,10 +778,7 @@ fn extract_grenade_paths(
                         _ => &[],
                     };
                     for (j, fp) in fps.iter().enumerate() {
-                        let burning = fbs
-                            .get(j)
-                            .map(|b| matches!(b, Variant::Bool(true)))
-                            .unwrap_or(true);
+                        let burning = matches!(fbs.get(j), Some(Variant::Bool(true)));
                         if !burning {
                             continue;
                         }
@@ -913,77 +922,112 @@ fn extract_weapon_spans(mmap: &[u8]) -> Result<Vec<WeaponSpanRaw>> {
         return Ok(Vec::new());
     }
 
-    struct WRow {
-        eid: i64,
-        tick: i64,
-        weapon: String,
+    // Aggregate observation spans in-place per entity_id directly from columnar buffers,
+    // using an interned weapon table to avoid per-tick String/WRow allocations.
+    struct ActiveSpan {
+        weapon_id: usize,
         prev_sid: Option<u64>,
-        x: i64,
-        y: i64,
-        z: i64,
+        start_tick: i64,
+        end_tick: i64,
+        start_x: i64,
+        start_y: i64,
+        start_z: i64,
+        end_x: i64,
+        end_y: i64,
+        end_z: i64,
     }
-    let mut by_eid: HashMap<i64, Vec<WRow>> = HashMap::new();
+
+    let mut weapon_names: Vec<String> = Vec::new();
+    let mut weapon_idx_map: HashMap<String, usize> = HashMap::new();
+    let mut active_by_eid: HashMap<i64, ActiveSpan> = HashMap::new();
+    let mut spans: Vec<WeaponSpanRaw> = Vec::new();
+
     for i in 0..n_rows {
         let (Some(tick), Some(eid)) = (col_i64(tick_col, i), col_i64(eid_col, i)) else {
             continue;
         };
-        let Some(weapon) = col_str_ref(name_col, i) else {
+        let Some(w_str) = col_str_ref(name_col, i) else {
             continue;
         };
-        if weapon.is_empty() {
+        if w_str.is_empty() {
             continue;
         }
+        let weapon_id = if let Some(&id) = weapon_idx_map.get(w_str) {
+            id
+        } else {
+            let id = weapon_names.len();
+            weapon_names.push(w_str.to_string());
+            weapon_idx_map.insert(w_str.to_string(), id);
+            id
+        };
+        let prev_sid = col_u64(sid_col, i);
         let x = round_ties_even_i64(col_f64(x_col, i).unwrap_or(0.0));
         let y = round_ties_even_i64(col_f64(y_col, i).unwrap_or(0.0));
         let z = round_ties_even_i64(col_f64(z_col, i).unwrap_or(0.0));
-        by_eid.entry(eid).or_default().push(WRow {
-            eid,
-            tick,
-            weapon: weapon.to_string(),
-            prev_sid: col_u64(sid_col, i),
-            x,
-            y,
-            z,
-        });
-    }
 
-    let mut spans = Vec::new();
-    for (_eid, mut rows) in by_eid {
-        rows.sort_by_key(|r| r.tick);
-        let mut cur: Option<WeaponSpanRaw> = None;
-        for r in rows {
-            let same_span = cur.as_ref().is_some_and(|c| {
-                c.weapon == r.weapon
-                    && (r.tick - c.end_tick) <= 2
-                    && (r.x - c.x).abs() <= 16
-                    && (r.y - c.y).abs() <= 16
-                    && (r.z - c.z).abs() <= 16
-            });
-            if same_span {
-                let c = cur.as_mut().unwrap();
-                c.end_tick = r.tick;
-                if c.prev_owner_steamid.is_none() && r.prev_sid.is_some() {
-                    c.prev_owner_steamid = r.prev_sid;
+        match active_by_eid.get_mut(&eid) {
+            Some(cur)
+                if cur.weapon_id == weapon_id
+                    && tick >= cur.end_tick
+                    && (tick - cur.end_tick) <= 64 =>
+            {
+                cur.end_tick = tick;
+                cur.end_x = x;
+                cur.end_y = y;
+                cur.end_z = z;
+                if cur.prev_sid.is_none() && prev_sid.is_some() {
+                    cur.prev_sid = prev_sid;
                 }
-            } else {
-                if let Some(prev) = cur.take() {
-                    spans.push(prev);
+            }
+            mut slot => {
+                if let Some(prev) = slot.take() {
+                    spans.push(WeaponSpanRaw {
+                        entity_id: eid,
+                        weapon: weapon_names[prev.weapon_id].clone(),
+                        prev_owner_steamid: prev.prev_sid,
+                        start_tick: prev.start_tick,
+                        end_tick: prev.end_tick,
+                        start_x: prev.start_x,
+                        start_y: prev.start_y,
+                        start_z: prev.start_z,
+                        end_x: prev.end_x,
+                        end_y: prev.end_y,
+                        end_z: prev.end_z,
+                    });
                 }
-                cur = Some(WeaponSpanRaw {
-                    entity_id: r.eid,
-                    weapon: r.weapon,
-                    prev_owner_steamid: r.prev_sid,
-                    start_tick: r.tick,
-                    end_tick: r.tick,
-                    x: r.x,
-                    y: r.y,
-                    z: r.z,
-                });
+                active_by_eid.insert(
+                    eid,
+                    ActiveSpan {
+                        weapon_id,
+                        prev_sid,
+                        start_tick: tick,
+                        end_tick: tick,
+                        start_x: x,
+                        start_y: y,
+                        start_z: z,
+                        end_x: x,
+                        end_y: y,
+                        end_z: z,
+                    },
+                );
             }
         }
-        if let Some(prev) = cur {
-            spans.push(prev);
-        }
+    }
+
+    for (eid, prev) in active_by_eid {
+        spans.push(WeaponSpanRaw {
+            entity_id: eid,
+            weapon: weapon_names[prev.weapon_id].clone(),
+            prev_owner_steamid: prev.prev_sid,
+            start_tick: prev.start_tick,
+            end_tick: prev.end_tick,
+            start_x: prev.start_x,
+            start_y: prev.start_y,
+            start_z: prev.start_z,
+            end_x: prev.end_x,
+            end_y: prev.end_y,
+            end_z: prev.end_z,
+        });
     }
     Ok(spans)
 }
@@ -1124,7 +1168,7 @@ pub fn parse_demo(
                             .or_else(|| event_field(&ev, "penetrated")),
                     )
                     .unwrap_or(0),
-                    attackerblind: var_bool(event_field(&ev, "attackerblind")),
+                    attackerblind: var_bool_opt(event_field(&ev, "attackerblind")),
                     attacker_x: var_f64(event_field_ci(&ev, "attacker_X")),
                     attacker_y: var_f64(event_field_ci(&ev, "attacker_Y")),
                     attacker_z: var_f64(event_field_ci(&ev, "attacker_Z")),
@@ -1300,25 +1344,33 @@ pub fn parse_demo(
         .filter(|ev| ev.name == "weapon_fire")
         .map(|ev| {
             let (ap_x, ap_y) = var_vec_xy(event_field(&ev, "user_aim_punch_angle"));
-            let recoil = var_i64(event_field(&ev, "user_i_recoil_idx")).or_else(|| {
-                var_f64(event_field(&ev, "user_fl_recoil_idx")).map(round_ties_even_i64)
-            });
-            let mut flags = 0i64;
-            if var_bool(event_field(&ev, "user_is_scoped")) {
-                flags |= FLAG_IS_SCOPED;
+            let recoil = var_f64(event_field(&ev, "user_fl_recoil_idx"))
+                .map(round_ties_even_i64)
+                .or_else(|| var_i64(event_field(&ev, "user_i_recoil_idx")));
+            let scp = var_bool_opt(event_field(&ev, "user_is_scoped"));
+            let wlk = var_bool_opt(event_field(&ev, "user_is_walking"));
+            let air = var_bool_opt(event_field(&ev, "user_is_airborne"));
+            let dck = var_f64(event_field(&ev, "user_duck_amount"));
+            let rld = var_bool_opt(event_field(&ev, "user_is_in_reload"));
+            let has_any_flag =
+                scp.is_some() || wlk.is_some() || air.is_some() || dck.is_some() || rld.is_some();
+            let mut f = 0i64;
+            if scp == Some(true) {
+                f |= FLAG_IS_SCOPED;
             }
-            if var_bool(event_field(&ev, "user_is_walking")) {
-                flags |= FLAG_IS_WALKING;
+            if wlk == Some(true) {
+                f |= FLAG_IS_WALKING;
             }
-            if var_bool(event_field(&ev, "user_is_airborne")) {
-                flags |= FLAG_IS_AIRBORNE;
+            if air == Some(true) {
+                f |= FLAG_IS_AIRBORNE;
             }
-            if var_f64(event_field(&ev, "user_duck_amount")).unwrap_or(0.0) >= 0.5 {
-                flags |= FLAG_IS_DUCKING;
+            if dck.unwrap_or(0.0) >= 0.5 {
+                f |= FLAG_IS_DUCKING;
             }
-            if var_bool(event_field(&ev, "user_is_in_reload")) {
-                flags |= FLAG_IS_IN_RELOAD;
+            if rld == Some(true) {
+                f |= FLAG_IS_IN_RELOAD;
             }
+            let flags = has_any_flag.then_some(f);
             FireRawRow {
                 tick: ev.tick as i64,
                 total_rounds_played: var_i64(event_field(&ev, "total_rounds_played")).unwrap_or(0),
@@ -1625,9 +1677,7 @@ pub fn parse_demo(
                 f_extra |= FLAG_IS_IN_RELOAD;
             }
             replay_cols.flags_extra.push(f_extra);
-            replay_cols
-                .ammo
-                .push(col_i64(ammo_c, i).unwrap_or(0).max(0));
+            replay_cols.ammo.push(col_i64(ammo_c, i).map(|a| a.max(0)));
             replay_cols.push_inventory(col_str_vec_ref(inv_c, i));
         }
     }
@@ -1731,23 +1781,33 @@ pub fn parse_demo(
                 duel_cols.pitch.push(col_f32(pitch_c, i));
                 duel_cols.health.push(col_f32(hp_c, i));
                 duel_cols.flash_duration.push(col_f32(fd_c, i));
+                let scp = col_bool_opt(scp_c, i);
+                let wlk = col_bool_opt(wlk_c, i);
+                let air = col_bool_opt(air_c, i);
+                let dck = col_f64(dck_c, i);
+                let rld = col_bool_opt(rld_c, i);
+                let has_any = scp.is_some()
+                    || wlk.is_some()
+                    || air.is_some()
+                    || dck.is_some()
+                    || rld.is_some();
                 let mut f = 0i64;
-                if col_bool(scp_c, i) {
+                if scp == Some(true) {
                     f |= FLAG_IS_SCOPED;
                 }
-                if col_bool(wlk_c, i) {
+                if wlk == Some(true) {
                     f |= FLAG_IS_WALKING;
                 }
-                if col_bool(air_c, i) {
+                if air == Some(true) {
                     f |= FLAG_IS_AIRBORNE;
                 }
-                if col_f64(dck_c, i).unwrap_or(0.0) >= 0.5 {
+                if dck.unwrap_or(0.0) >= 0.5 {
                     f |= FLAG_IS_DUCKING;
                 }
-                if col_bool(rld_c, i) {
+                if rld == Some(true) {
                     f |= FLAG_IS_IN_RELOAD;
                 }
-                duel_cols.flags.push(f);
+                duel_cols.flags.push(has_any.then_some(f));
             }
         }
         record(&mut timings, "parse.duelWindows", st);

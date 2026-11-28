@@ -40,10 +40,19 @@ const REPLAY_COLS: [&str; 13] = [
     "flash",
     "flags",
 ];
-const REPLAY_OPTIONAL_FRAME_COLS: [&str; 1] = ["grenades"];
+const REPLAY_OPTIONAL_FRAME_COLS: [&str; 2] = ["grenades", "ammo"];
 const DUEL_COLS: [&str; 7] = ["x", "y", "z", "yaw", "pitch", "hp", "flash"];
+const DUEL_OPTIONAL_COLS: [&str; 1] = ["flags"];
 const SHOT_COLS: [&str; 10] = [
     "tick", "weapon", "x", "y", "z", "vx", "vy", "vz", "yaw", "pitch",
+];
+const SHOT_OPTIONAL_COLS: [&str; 6] = [
+    "aimPunchX",
+    "aimPunchY",
+    "accuracyPenalty",
+    "recoilIdx",
+    "ammo",
+    "flags",
 ];
 
 fn embedded_schema_str(key: &str) -> Option<&'static str> {
@@ -471,7 +480,23 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
     check_tick_windows("damages", damages, &rounds_by_number, &["tick"], errors);
     check_tick_windows("blinds", blinds, &rounds_by_number, &["tick"], errors);
     check_tick_windows("bombs", bombs, &rounds_by_number, &["tick"], errors);
-    check_tick_windows("weapons", weapons, &rounds_by_number, &["tick"], errors);
+    check_tick_windows(
+        "weapons",
+        weapons,
+        &rounds_by_number,
+        &["startTick", "endTick"],
+        errors,
+    );
+    for (wi, w) in weapons.iter().enumerate() {
+        let st = w.get("startTick").and_then(|v| v.as_i64()).unwrap_or(0);
+        let et = w.get("endTick").and_then(|v| v.as_i64()).unwrap_or(0);
+        if st > et {
+            push_err(
+                errors,
+                &format!("weapons.json[{wi}]: startTick ({st}) > endTick ({et})"),
+            );
+        }
+    }
     check_tick_windows(
         "grenades",
         grenades,
@@ -504,7 +529,7 @@ fn package_qa(data: &HashMap<String, Value>, errors: &mut Vec<String>) {
             ["flasherIndex", "flashedIndex"].as_slice(),
         ),
         ("bombs", bombs, ["actorIndex"].as_slice()),
-        ("weapons", weapons, ["actorIndex"].as_slice()),
+        ("weapons", weapons, ["previousOwnerIndex"].as_slice()),
         ("grenades", grenades, ["throwerIndex"].as_slice()),
         ("clutches", clutches, ["clutcherIndex"].as_slice()),
         ("player-economies", economies, ["playerIndex"].as_slice()),
@@ -774,6 +799,24 @@ fn check_shots_stream(
         if lengths.len() > 1 {
             push_err(errors, &format!("{label}: column lengths differ"));
             continue;
+        }
+        let expected_len = t
+            .get("tick")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        for c in SHOT_OPTIONAL_COLS {
+            if let Some(arr) = t.get(c).and_then(|v| v.as_array()) {
+                if arr.len() != expected_len {
+                    push_err(
+                        errors,
+                        &format!(
+                            "{label}: optional column {c} length {} != tick length {expected_len}",
+                            arr.len()
+                        ),
+                    );
+                }
+            }
         }
         if let Some(ws) = t.get("weapon").and_then(|v| v.as_array()) {
             for w in ws {
@@ -1058,14 +1101,21 @@ fn check_duels_stream(
         }
         if let Some(players) = w.get("players").and_then(|v| v.as_array()) {
             for (pi, track) in players.iter().enumerate() {
-                check_track_frames(
-                    &format!("{label} players[{pi}]"),
-                    track,
-                    &DUEL_COLS,
-                    fc,
-                    n_players,
-                    errors,
-                );
+                let tlabel = format!("{label} players[{pi}]");
+                check_track_frames(&tlabel, track, &DUEL_COLS, fc, n_players, errors);
+                for c in DUEL_OPTIONAL_COLS {
+                    if let Some(arr) = track.get(c).and_then(|v| v.as_array()) {
+                        if arr.len() != fc {
+                            push_err(
+                                errors,
+                                &format!(
+                                    "{tlabel}: optional column {c} length {} != frameCount {fc}",
+                                    arr.len()
+                                ),
+                            );
+                        }
+                    }
+                }
             }
         }
     }

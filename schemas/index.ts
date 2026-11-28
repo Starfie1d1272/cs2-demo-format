@@ -668,23 +668,22 @@ export type Duels = z.infer<typeof duelsSchema>;
 
 // ── All schemas by manifest file key ─────────────────────────────────────────
 
-// ── weapons.json (ground weapon lifecycle events, 3.1+) ─────────────────────
+// ── weapons.json (ground weapon observation spans, 3.1+) ──────────────────
 
-export const weaponEventTypeSchema = z.enum(['dropped', 'picked_up', 'round_end']);
-
-export const weaponEventRowSchema = z
+export const weaponSpanRowSchema = z
   .object({
     roundNumber: positiveInt,
-    tick: positiveInt,
-    type: weaponEventTypeSchema,
     entityId: nonNegInt,
     weapon: weaponString,
-    actorIndex: nullablePlayerIndex,
-    position: vec3Schema,
+    startTick: positiveInt,
+    endTick: positiveInt,
+    previousOwnerIndex: nullablePlayerIndex,
+    startPosition: vec3Schema,
+    endPosition: vec3Schema,
   })
   .strict();
-export const weaponsSchema = z.array(weaponEventRowSchema);
-export type WeaponEventRow = z.infer<typeof weaponEventRowSchema>;
+export const weaponsSchema = z.array(weaponSpanRowSchema);
+export type WeaponSpanRow = z.infer<typeof weaponSpanRowSchema>;
 
 export const SCHEMAS_BY_KEY = {
   match: matchSchema,

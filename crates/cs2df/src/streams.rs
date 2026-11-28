@@ -74,7 +74,7 @@ pub struct ReplayColumns {
     pub grenades: Vec<Vec<GrenadeType>>,
     pub has_bomb: Vec<bool>,
     pub flags_extra: Vec<i64>,
-    pub ammo: Vec<i64>,
+    pub ammo: Vec<Option<i64>>,
 }
 
 impl ReplayColumns {
@@ -172,7 +172,7 @@ pub struct DuelColumns {
     pub pitch: Vec<Option<f32>>,
     pub health: Vec<Option<f32>>,
     pub flash_duration: Vec<Option<f32>>,
-    pub flags: Vec<i64>,
+    pub flags: Vec<Option<i64>>,
 }
 
 impl DuelColumns {
@@ -227,7 +227,7 @@ pub struct FireRawRow {
     pub accuracy_penalty: Option<f64>,
     pub recoil_idx: Option<i64>,
     pub ammo: Option<i64>,
-    pub flags: i64,
+    pub flags: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -278,7 +278,8 @@ pub struct ReplayPlayerTrack {
     pub flash: Vec<i64>,
     pub flags: Vec<i64>,
     pub grenades: Vec<Vec<GrenadeType>>,
-    pub ammo: Vec<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ammo: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -447,6 +448,7 @@ pub fn build_replay(
             let mut plidx = vec![-1i64; frame_count];
             let mut flags = vec![0i64; frame_count];
             let mut ammo = vec![0i64; frame_count];
+            let mut any_ammo = false;
 
             for (fi, row_opt) in aligned.iter().enumerate() {
                 let Some(ri) = *row_opt else {
@@ -485,11 +487,10 @@ pub fn build_replay(
                     } else {
                         0
                     };
-                ammo[fi] = if alive == 1 {
-                    cols.ammo.get(ri).copied().unwrap_or(0)
-                } else {
-                    0
-                };
+                if let Some(a) = cols.ammo.get(ri).copied().flatten() {
+                    any_ammo = true;
+                    ammo[fi] = if alive == 1 { a } else { 0 };
+                }
             }
 
             let mut grenades_out = vec![Vec::new(); frame_count];
@@ -524,7 +525,7 @@ pub fn build_replay(
                 flash,
                 flags,
                 grenades: grenades_out,
-                ammo,
+                ammo: if any_ammo { Some(ammo) } else { None },
             });
         }
 
@@ -589,7 +590,8 @@ pub struct DuelPlayerTrack {
     pub pitch: Vec<i64>,
     pub hp: Vec<i64>,
     pub flash: Vec<i64>,
-    pub flags: Vec<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -711,6 +713,7 @@ pub fn build_duels(
             let mut hp = vec![0i64; frame_count];
             let mut flash = vec![0i64; frame_count];
             let mut flags = vec![0i64; frame_count];
+            let mut any_flags = false;
             let mut any_present = false;
 
             for (fi, row_opt) in aligned.iter().enumerate() {
@@ -729,11 +732,10 @@ pub fn build_duels(
                     flash[fi] =
                         round_ties_even_i64(cols.flash_duration[ri].unwrap_or(0.0) as f64 * 10.0)
                             .clamp(0, 60);
-                    flags[fi] = if hp[fi] > 0 {
-                        cols.flags.get(ri).copied().unwrap_or(0)
-                    } else {
-                        0
-                    };
+                    if let Some(f) = cols.flags.get(ri).copied().flatten() {
+                        any_flags = true;
+                        flags[fi] = if hp[fi] > 0 { f } else { 0 };
+                    }
                 }
             }
             if !any_present {
@@ -748,7 +750,7 @@ pub fn build_duels(
                 pitch: delta_encode(&ffill_bfill_round(&raw_pitch, ANGLE_SCALE as f64)),
                 hp,
                 flash,
-                flags,
+                flags: if any_flags { Some(flags) } else { None },
             });
         }
 
@@ -804,12 +806,18 @@ pub struct ShotTrack {
     pub vz: Vec<i64>,
     pub yaw: Vec<i64>,
     pub pitch: Vec<i64>,
-    pub aim_punch_x: Vec<i64>,
-    pub aim_punch_y: Vec<i64>,
-    pub accuracy_penalty: Vec<i64>,
-    pub recoil_idx: Vec<i64>,
-    pub ammo: Vec<i64>,
-    pub flags: Vec<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aim_punch_x: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aim_punch_y: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accuracy_penalty: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recoil_idx: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ammo: Option<Vec<i64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -903,6 +911,12 @@ pub fn build_shots(
         let mut rec_vals = Vec::with_capacity(rows.len());
         let mut ammo_vals = Vec::with_capacity(rows.len());
         let mut flag_vals = Vec::with_capacity(rows.len());
+        let mut any_ap_x = false;
+        let mut any_ap_y = false;
+        let mut any_acc = false;
+        let mut any_rec = false;
+        let mut any_ammo = false;
+        let mut any_flags = false;
         for r in &rows {
             vx_vals.push(round_ties_even_i64(
                 r.velocity_x.filter(|v| v.is_finite()).unwrap_or(0.0),
@@ -913,18 +927,25 @@ pub fn build_shots(
             vz_vals.push(round_ties_even_i64(
                 r.velocity_z.filter(|v| v.is_finite()).unwrap_or(0.0),
             ));
+            let ap_x = r.aim_punch_x.filter(|v| v.is_finite());
+            any_ap_x |= ap_x.is_some();
             ap_x_vals.push(round_ties_even_i64(
-                r.aim_punch_x.filter(|v| v.is_finite()).unwrap_or(0.0) * ANGLE_SCALE as f64,
+                ap_x.unwrap_or(0.0) * ANGLE_SCALE as f64,
             ));
+            let ap_y = r.aim_punch_y.filter(|v| v.is_finite());
+            any_ap_y |= ap_y.is_some();
             ap_y_vals.push(round_ties_even_i64(
-                r.aim_punch_y.filter(|v| v.is_finite()).unwrap_or(0.0) * ANGLE_SCALE as f64,
+                ap_y.unwrap_or(0.0) * ANGLE_SCALE as f64,
             ));
-            acc_vals.push(round_ties_even_i64(
-                r.accuracy_penalty.filter(|v| v.is_finite()).unwrap_or(0.0) * 1000.0,
-            ));
+            let acc = r.accuracy_penalty.filter(|v| v.is_finite());
+            any_acc |= acc.is_some();
+            acc_vals.push(round_ties_even_i64(acc.unwrap_or(0.0) * 1000.0));
+            any_rec |= r.recoil_idx.is_some();
             rec_vals.push(r.recoil_idx.unwrap_or(0));
+            any_ammo |= r.ammo.is_some();
             ammo_vals.push(r.ammo.unwrap_or(0));
-            flag_vals.push(r.flags);
+            any_flags |= r.flags.is_some();
+            flag_vals.push(r.flags.unwrap_or(0));
         }
 
         tracks.push(ShotTrack {
@@ -940,12 +961,12 @@ pub fn build_shots(
             vz: vz_vals,
             yaw: delta_encode(&yaws),
             pitch: delta_encode(&pitches),
-            aim_punch_x: ap_x_vals,
-            aim_punch_y: ap_y_vals,
-            accuracy_penalty: acc_vals,
-            recoil_idx: rec_vals,
-            ammo: ammo_vals,
-            flags: flag_vals,
+            aim_punch_x: if any_ap_x { Some(ap_x_vals) } else { None },
+            aim_punch_y: if any_ap_y { Some(ap_y_vals) } else { None },
+            accuracy_penalty: if any_acc { Some(acc_vals) } else { None },
+            recoil_idx: if any_rec { Some(rec_vals) } else { None },
+            ammo: if any_ammo { Some(ammo_vals) } else { None },
+            flags: if any_flags { Some(flag_vals) } else { None },
         });
     }
 

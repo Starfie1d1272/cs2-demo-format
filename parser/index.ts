@@ -3,8 +3,14 @@
  *
  * Parses a CS2 demo export ZIP buffer into a typed in-memory object.
  * Validates every known file against the schemas defined in `schemas/index.ts`,
- * while tolerating future 3.x minor versions, unknown optional fields, and
- * unregistered optional manifest file keys.
+ * while tolerating future 3.x minor versions:
+ *   - accepts `schemaVersion` matching `cs2-demo-format/3.<minor>`;
+ *   - tolerates unknown optional fields on objects (including nested objects);
+ *   - skips unregistered optional keys in `manifest.files`.
+ *
+ * Boundary: 3.x forward compatibility covers additive optional fields and
+ * unregistered optional files; it does NOT guarantee unconditional tolerance of
+ * unknown values added to existing enums.
  *
  * Usage:
  *   import { parseDemoPackage } from "cs2-demo-format/parser";
@@ -39,7 +45,7 @@ import {
   type ReplayPlayerTrack,
   type Duels,
   type DuelPlayerTrack,
-  type WeaponEventRow,
+  type WeaponSpanRow,
 } from '../schemas/index.js';
 
 export {
@@ -55,8 +61,12 @@ export {
   FLAG_IS_IN_RELOAD,
 } from '../schemas/index.js';
 
+export type ConsumerManifest = Omit<Manifest, 'schemaVersion'> & {
+  schemaVersion: `cs2-demo-format/3.${number}`;
+};
+
 export interface ParsedDemoPackage {
-  manifest: Manifest;
+  manifest: ConsumerManifest;
   files: {
     match: Match;
     players: PlayerRow[];
@@ -72,13 +82,13 @@ export interface ParsedDemoPackage {
     shots?: Shots;
     replay?: Replay;
     duels?: Duels;
-    weapons?: WeaponEventRow[];
+    weapons?: WeaponSpanRow[];
   };
 }
 
 /**
- * Recursively strip `.strict()` from a Zod schema so consumers tolerate
- * additional optional fields introduced in future `3.x` minor versions.
+ * Recursively strip `.strict()` from a Zod schema while preserving existing
+ * constraints (such as array `.min(1)` checks on `duels.anchors`).
  */
 function loosenSchema<T extends z.ZodTypeAny>(schema: T): z.ZodTypeAny {
   const def = (
@@ -101,7 +111,11 @@ function loosenSchema<T extends z.ZodTypeAny>(schema: T): z.ZodTypeAny {
     return z.object(nextShape);
   }
   if (type === 'array' && def?.element) {
-    return z.array(loosenSchema(def.element));
+    const arr = schema as unknown as {
+      clone: (nextDef: Record<string, unknown>) => z.ZodTypeAny;
+      def: Record<string, unknown>;
+    };
+    return arr.clone({ ...arr.def, element: loosenSchema(def.element) });
   }
   if (type === 'optional' && def?.innerType) {
     return loosenSchema(def.innerType).optional();
@@ -118,7 +132,10 @@ function loosenSchema<T extends z.ZodTypeAny>(schema: T): z.ZodTypeAny {
 const consumerManifestSchema = (
   loosenSchema(manifestSchema) as z.ZodObject<Record<string, z.ZodTypeAny>>
 ).extend({
-  schemaVersion: z.string().regex(/^cs2-demo-format\/3\.\d+$/),
+  schemaVersion: z
+    .string()
+    .regex(/^cs2-demo-format\/3\.\d+$/)
+    .transform((v) => v as `cs2-demo-format/3.${number}`),
   files: (
     loosenSchema(manifestSchema.shape.files) as z.ZodObject<Record<string, z.ZodTypeAny>>
   ).catchall(z.string().min(1)),
@@ -144,7 +161,7 @@ export async function parseDemoPackage(buffer: Buffer | ArrayBuffer): Promise<Pa
   if (!manifestFile) throw new Error('ZIP is missing manifest.json');
 
   const manifestRaw = JSON.parse(await manifestFile.async('text'));
-  const manifest = consumerManifestSchema.parse(manifestRaw) as Manifest;
+  const manifest = consumerManifestSchema.parse(manifestRaw) as unknown as ConsumerManifest;
 
   const files: Record<string, unknown> = {};
 

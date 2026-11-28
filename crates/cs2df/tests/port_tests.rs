@@ -64,7 +64,7 @@ fn make_kill(killer: Option<usize>, victim: usize, tick: i64, round_number: i64)
         penetrated_objects: 0,
         killer_position: None,
         victim_position: Pos3 { x: 0, y: 0, z: 0 },
-        killer_blinded: false,
+        killer_blinded: None,
     }
 }
 
@@ -197,7 +197,7 @@ fn kills_after_round_end_before_next_start_are_kept_in_previous_round() {
         thrusmoke: false,
         noscope: false,
         penetrated: 0,
-        attackerblind: false,
+        attackerblind: None,
         attacker_x: None,
         attacker_y: None,
         attacker_z: None,
@@ -428,7 +428,7 @@ fn builder_uses_demo_tickrate_and_sorts_parser_rows() {
         thrusmoke: false,
         noscope: false,
         penetrated: 0,
-        attackerblind: false,
+        attackerblind: None,
         attacker_x: None,
         attacker_y: None,
         attacker_z: None,
@@ -834,4 +834,97 @@ fn v3_mid_fixture_validates_strict() {
         .to_path_buf();
     let fixture = root.join("fixtures").join("v3-mid");
     assert!(validate_dir_fixture(&fixture, None, true).unwrap());
+}
+
+fn copy_v3_mid_to_temp() -> tempfile::TempDir {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let fixture = root.join("fixtures").join("v3-mid");
+    let tmp = tempfile::tempdir().unwrap();
+    for entry in std::fs::read_dir(&fixture).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            std::fs::copy(&path, tmp.path().join(path.file_name().unwrap())).unwrap();
+        }
+    }
+    tmp
+}
+
+#[test]
+fn validate_rejects_mismatched_31_optional_column_lengths_and_bad_weapon_span() {
+    // 1. replay.ammo length mismatch
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let p = tmp.path().join("replay.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        v["rounds"][0]["players"][0]["ammo"] = serde_json::json!([30, 29]);
+        std::fs::write(&p, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+
+    // 2. duels.flags length mismatch
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let p = tmp.path().join("duels.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        v["windows"][0]["players"][0]["flags"] = serde_json::json!([16]);
+        std::fs::write(&p, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+
+    // 3. shots.aimPunchX length mismatch
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let p = tmp.path().join("shots.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        v["tracks"][0]["aimPunchX"] = serde_json::json!([
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
+            47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68,
+            69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
+            91, 92, 93, 94, 95, 96, 97, 98, 99, 100
+        ]);
+        std::fs::write(&p, serde_json::to_vec(&v).unwrap()).unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
+
+    // 4. weapons.json startTick > endTick
+    {
+        let tmp = copy_v3_mid_to_temp();
+        let mp = tmp.path().join("manifest.json");
+        let mut m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&mp).unwrap()).unwrap();
+        m["schemaVersion"] = serde_json::json!("cs2-demo-format/3.1");
+        m["files"]["weapons"] = serde_json::json!("weapons.json");
+        std::fs::write(&mp, serde_json::to_vec(&m).unwrap()).unwrap();
+
+        let rp: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(tmp.path().join("rounds.json")).unwrap())
+                .unwrap();
+        let fz = rp[0]["freezeEndTick"].as_i64().unwrap();
+        std::fs::write(
+            tmp.path().join("weapons.json"),
+            serde_json::json!([{
+                "roundNumber": 1,
+                "entityId": 100,
+                "weapon": "ak47",
+                "startTick": fz + 50,
+                "endTick": fz + 10,
+                "previousOwnerIndex": 0,
+                "startPosition": { "x": 10, "y": 20, "z": 30 },
+                "endPosition": { "x": 10, "y": 20, "z": 30 }
+            }])
+            .to_string(),
+        )
+        .unwrap();
+        assert!(!validate_dir_fixture(tmp.path(), None, true).unwrap());
+    }
 }

@@ -273,7 +273,7 @@ pub struct DeathRawRow {
     pub thrusmoke: bool,
     pub noscope: bool,
     pub penetrated: i64,
-    pub attackerblind: bool,
+    pub attackerblind: Option<bool>,
     pub attacker_x: Option<f64>,
     pub attacker_y: Option<f64>,
     pub attacker_z: Option<f64>,
@@ -303,7 +303,8 @@ pub struct KillRow {
     pub penetrated_objects: i64,
     pub killer_position: Option<Pos3>,
     pub victim_position: Pos3,
-    pub killer_blinded: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub killer_blinded: Option<bool>,
 }
 
 pub fn build_kills(
@@ -909,10 +910,14 @@ pub fn build_grenades(
         }
     }
 
-    // attach CInferno fire points to molotov / incendiary grenades
+    // attach CInferno fire points to molotov / incendiary grenades:
+    // 1) prefer direct entity_id match;
+    // 2) fallback to spatiotemporal match using fire centroid with explicit distance cap.
     struct FireItem<'a> {
         rn: i64,
         thrower_idx: Option<usize>,
+        centroid_x: i64,
+        centroid_y: i64,
         raw: &'a InfernoFireRaw,
         used: bool,
     }
@@ -923,17 +928,52 @@ pub fn build_grenades(
                 return None;
             }
             let rn = round_model.round_for_tick(f.start_tick)?;
+            let n_pts = f.fire_points.len() as i128;
+            let sum_x: i128 = f.fire_points.iter().map(|p| p.x as i128).sum();
+            let sum_y: i128 = f.fire_points.iter().map(|p| p.y as i128).sum();
             Some(FireItem {
                 rn,
                 thrower_idx: players.idx(f.steamid),
+                centroid_x: (sum_x / n_pts) as i64,
+                centroid_y: (sum_y / n_pts) as i64,
                 raw: f,
                 used: false,
             })
         })
         .collect();
 
+    // Pass A: direct entity_id match
     for g in out.iter_mut() {
         if !matches!(g.grenade, GrenadeType::Molotov | GrenadeType::Incendiary) {
+            continue;
+        }
+        let Some(geid) = g.entity_id else {
+            continue;
+        };
+        let mut best_idx: Option<usize> = None;
+        let mut best_dt = i64::MAX;
+        for (idx, f) in fire_items.iter().enumerate() {
+            if f.used || f.rn != g.round_number || f.raw.entity_id != geid {
+                continue;
+            }
+            let dt = (f.raw.start_tick - g.effect_tick).abs();
+            if dt <= 96 && dt < best_dt {
+                best_dt = dt;
+                best_idx = Some(idx);
+            }
+        }
+        if let Some(idx) = best_idx {
+            fire_items[idx].used = true;
+            g.fire_points = Some(fire_items[idx].raw.fire_points.clone());
+        }
+    }
+
+    // Pass B: spatiotemporal fallback with centroid distance cap (512 game units)
+    const MAX_FIRE_DIST_SQ: i128 = 512 * 512;
+    for g in out.iter_mut() {
+        if !matches!(g.grenade, GrenadeType::Molotov | GrenadeType::Incendiary)
+            || g.fire_points.is_some()
+        {
             continue;
         }
         let mut best_idx: Option<usize> = None;
@@ -951,10 +991,12 @@ pub fn build_grenades(
             if dt > 96 {
                 continue;
             }
-            let pt = &f.raw.fire_points[0];
-            let dx = (pt.x - g.effect_position.x) as i128;
-            let dy = (pt.y - g.effect_position.y) as i128;
+            let dx = (f.centroid_x - g.effect_position.x) as i128;
+            let dy = (f.centroid_y - g.effect_position.y) as i128;
             let d2 = dx * dx + dy * dy;
+            if d2 > MAX_FIRE_DIST_SQ {
+                continue;
+            }
             let score = (dt, d2);
             if best_score.is_none_or(|b| score < b) {
                 best_score = Some(score);
@@ -967,6 +1009,11 @@ pub fn build_grenades(
         }
     }
 
+    // Clear temporary entity_id for molotovs too
+    for g in out.iter_mut() {
+        g.entity_id = None;
+    }
+
     out
 }
 
@@ -977,37 +1024,32 @@ pub struct WeaponSpanRaw {
     pub prev_owner_steamid: Option<u64>,
     pub start_tick: i64,
     pub end_tick: i64,
-    pub x: i64,
-    pub y: i64,
-    pub z: i64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum WeaponEventKind {
-    Dropped,
-    PickedUp,
-    RoundEnd,
+    pub start_x: i64,
+    pub start_y: i64,
+    pub start_z: i64,
+    pub end_x: i64,
+    pub end_y: i64,
+    pub end_z: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WeaponEventRow {
+pub struct WeaponSpanRow {
     pub round_number: i64,
-    pub tick: i64,
-    #[serde(rename = "type")]
-    pub event_type: WeaponEventKind,
     pub entity_id: i64,
     pub weapon: String,
-    pub actor_index: Option<usize>,
-    pub position: Pos3,
+    pub start_tick: i64,
+    pub end_tick: i64,
+    pub previous_owner_index: Option<usize>,
+    pub start_position: Pos3,
+    pub end_position: Pos3,
 }
 
 pub fn build_weapons(
     spans: &[WeaponSpanRaw],
     players: &PlayerDirectory,
     round_model: &RoundModel,
-) -> Vec<WeaponEventRow> {
+) -> Vec<WeaponSpanRow> {
     let mut out = Vec::new();
     for s in spans {
         let Some(rn) = round_model.round_for_tick(s.start_tick) else {
@@ -1019,7 +1061,9 @@ pub fn build_weapons(
         let Some(event_end) = round_model.event_end_tick(rn) else {
             continue;
         };
-        if s.start_tick < window.freeze_end_tick || s.start_tick > event_end {
+        let start_tick = s.start_tick.max(window.freeze_end_tick);
+        let end_tick = s.end_tick.min(event_end);
+        if start_tick > end_tick {
             continue;
         }
         let Some(weapon) = normalize_weapon_name(Some(&s.weapon)) else {
@@ -1028,37 +1072,26 @@ pub fn build_weapons(
         if weapon == "c4" {
             continue;
         }
-        let pos = Pos3 {
-            x: s.x,
-            y: s.y,
-            z: s.z,
-        };
-        out.push(WeaponEventRow {
+        out.push(WeaponSpanRow {
             round_number: rn,
-            tick: s.start_tick,
-            event_type: WeaponEventKind::Dropped,
-            entity_id: s.entity_id,
-            weapon: weapon.clone(),
-            actor_index: players.idx(s.prev_owner_steamid),
-            position: pos.clone(),
-        });
-        let end_clamped = s.end_tick.min(event_end);
-        let (end_kind, end_tick) = if end_clamped + 2 < window.end_tick {
-            (WeaponEventKind::PickedUp, (end_clamped + 1).min(event_end))
-        } else {
-            (WeaponEventKind::RoundEnd, end_clamped.max(s.start_tick))
-        };
-        out.push(WeaponEventRow {
-            round_number: rn,
-            tick: end_tick,
-            event_type: end_kind,
             entity_id: s.entity_id,
             weapon,
-            actor_index: None,
-            position: pos,
+            start_tick,
+            end_tick,
+            previous_owner_index: players.idx(s.prev_owner_steamid),
+            start_position: Pos3 {
+                x: s.start_x,
+                y: s.start_y,
+                z: s.start_z,
+            },
+            end_position: Pos3 {
+                x: s.end_x,
+                y: s.end_y,
+                z: s.end_z,
+            },
         });
     }
-    out.sort_by_key(|w| (w.round_number, w.tick, w.entity_id));
+    out.sort_by_key(|w| (w.round_number, w.start_tick, w.entity_id));
     out
 }
 

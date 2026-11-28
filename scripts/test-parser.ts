@@ -88,12 +88,13 @@ async function main() {
     JSON.stringify([
       {
         roundNumber: 1,
-        tick: firstRound.startTick + 10,
-        type: 'dropped',
         entityId: 42,
         weapon: 'ak47',
-        actorIndex: 0,
-        position: { x: 10, y: 20, z: 30 },
+        startTick: firstRound.startTick + 10,
+        endTick: firstRound.startTick + 120,
+        previousOwnerIndex: 0,
+        startPosition: { x: 10, y: 20, z: 30 },
+        endPosition: { x: 12, y: 22, z: 30 },
       },
     ]),
   );
@@ -125,6 +126,14 @@ async function main() {
   const pkg32 = await parseDemoPackage(buf32);
   assert.equal(pkg32.manifest.schemaVersion, 'cs2-demo-format/3.2');
   assert.equal(pkg32.files.match.mapName, 'de_anubis');
+
+  // 4. Preserves array .min(1) constraint on duels.anchors even when loosened
+  const zipBadDuels = await JSZip.loadAsync(buf31);
+  const duelsBad = JSON.parse(await zipBadDuels.file('duels.json')!.async('text'));
+  duelsBad.windows[0].anchors = [];
+  zipBadDuels.file('duels.json', JSON.stringify(duelsBad));
+  const bufBadDuels = await zipBadDuels.generateAsync({ type: 'nodebuffer' });
+  await assert.rejects(() => parseDemoPackage(bufBadDuels));
 
   console.log('✅ parser/index.ts passed 3.0, 3.1, and 3.2 forward-compatibility tests');
 }
